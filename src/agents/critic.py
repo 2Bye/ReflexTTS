@@ -11,8 +11,7 @@ from __future__ import annotations
 
 import json
 
-import numpy as np
-
+from src.agents.actor import _decode_wav_to_array
 from src.agents.prompts import CRITIC_JUDGE_SYSTEM_PROMPT
 from src.agents.schemas import CriticOutput
 from src.inference.asr_client import ASRClient
@@ -44,7 +43,7 @@ async def run_critic(
     logger.info("critic_start", iteration=state.iteration)
 
     # ── Phase 1: ASR Transcription ──
-    audio_array = _decode_wav(state.audio_bytes)
+    audio_array = _decode_wav_to_array(state.audio_bytes)
 
     asr_result = await asr.transcribe(
         audio=audio_array,
@@ -69,14 +68,13 @@ async def run_critic(
     )
 
     # ── Phase 2: Judge (LLM comparison) ──
-    # Build target text from Director segments
     target_text = _extract_target_text(state)
 
     judge_input = json.dumps(
         {
             "target_text": target_text,
             "transcript": asr_result.text,
-            "word_timestamps": state.word_timestamps[:50],  # Limit for context window
+            "word_timestamps": state.word_timestamps[:50],
         },
         ensure_ascii=False,
     )
@@ -119,33 +117,3 @@ def _extract_target_text(state: GraphState) -> str:
         segments = state.ssml_markup["segments"]
         return " ".join(seg.get("text", "") for seg in segments)
     return state.text
-
-
-def _decode_wav(wav_bytes: bytes) -> np.ndarray:
-    """Decode WAV bytes to float32 numpy array.
-
-    Handles the WAV format produced by Actor._encode_wav().
-
-    Args:
-        wav_bytes: WAV file bytes (16-bit PCM).
-
-    Returns:
-        Audio waveform as float32 array, normalized to [-1, 1].
-    """
-    import struct
-
-    if len(wav_bytes) < 44:
-        return np.array([], dtype=np.float32)
-
-    # Skip WAV header (44 bytes for standard PCM)
-    # Find "data" chunk
-    data_offset = wav_bytes.find(b"data")
-    if data_offset == -1:
-        return np.array([], dtype=np.float32)
-
-    data_size = struct.unpack("<I", wav_bytes[data_offset + 4 : data_offset + 8])[0]
-    audio_data = wav_bytes[data_offset + 8 : data_offset + 8 + data_size]
-
-    # Convert int16 to float32
-    audio_int16 = np.frombuffer(audio_data, dtype=np.int16)
-    return audio_int16.astype(np.float32) / 32767.0

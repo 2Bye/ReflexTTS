@@ -36,11 +36,11 @@ class TestEncodeWav:
 
     def test_roundtrip_preserves_shape(self) -> None:
         """Encode then decode should preserve audio length."""
-        from src.agents.critic import _decode_wav
+        from src.agents.actor import _decode_wav_to_array
 
         waveform = np.random.randn(5000).astype(np.float32) * 0.5
         wav_bytes = _encode_wav(waveform, 22050)
-        decoded = _decode_wav(wav_bytes)
+        decoded = _decode_wav_to_array(wav_bytes)
 
         assert len(decoded) == len(waveform)
 

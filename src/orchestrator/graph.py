@@ -16,6 +16,7 @@ from langgraph.graph import END, StateGraph
 from src.agents.actor import run_actor
 from src.agents.critic import run_critic
 from src.agents.director import run_director
+from src.agents.editor import run_editor
 from src.inference.asr_client import ASRClient
 from src.inference.tts_client import TTSClient
 from src.inference.vllm_client import VLLMClient
@@ -35,9 +36,9 @@ def build_graph(
 
     Graph structure:
         director → actor → critic → route
-        route: approved → END
-               hotfix   → director (retry with phoneme hints)
-               editor   → editor → critic (re-evaluate)  [M3]
+        route: approved  → END
+               hotfix    → director (retry with phoneme hints)
+               editor    → editor → critic (re-evaluate)
                max_retries → END (needs_human_review)
 
     Args:
@@ -68,11 +69,20 @@ def build_graph(
         gs.iteration += 1
         return gs.model_dump()
 
+    async def editor_node(state: dict[str, Any]) -> dict[str, Any]:
+        gs = GraphState.model_validate(state)
+        gs = await run_editor(gs, tts)
+        return gs.model_dump()
+
     async def mark_human_review(state: dict[str, Any]) -> dict[str, Any]:
         gs = GraphState.model_validate(state)
         gs.needs_human_review = True
         gs.agent_log.append(
-            {"agent": "orchestrator", "action": "escalated", "detail": f"Max retries ({max_retries}) reached"}  # type: ignore[arg-type]
+            {  # type: ignore[arg-type]
+                "agent": "orchestrator",
+                "action": "escalated",
+                "detail": f"Max retries ({max_retries}) reached",
+            }
         )
         logger.warning(
             "pipeline_escalated",
@@ -88,7 +98,8 @@ def build_graph(
 
         Returns:
             "approved" - audio is acceptable, go to END
-            "hotfix" - retry with pronunciation hints
+            "hotfix" - retry with pronunciation hints via Director
+            "editor" - latent inpainting / chunk regen via Editor
             "needs_human_review" - max retries exhausted
         """
         gs = GraphState.model_validate(state)
@@ -98,21 +109,21 @@ def build_graph(
             return "approved"
 
         if gs.iteration >= max_retries:
-            logger.warning("route_max_retries", iteration=gs.iteration, wer=gs.wer)
+            logger.warning("route_max_retries", iteration=gs.iteration)
             return "needs_human_review"
 
-        # Check if any errors can be fixed via hotfix
-        has_hotfixable = any(
-            e.can_hotfix for e in gs.errors if hasattr(e, "can_hotfix")
-        )
+        # Check if ALL errors are hotfixable
+        all_hotfixable = all(
+            e.can_hotfix for e in gs.errors
+        ) if gs.errors else False
 
-        if has_hotfixable:
+        if all_hotfixable:
             logger.info("route_hotfix", iteration=gs.iteration)
             return "hotfix"
 
-        # No hotfix available — for now escalate. Editor (M3) will handle this.
-        logger.info("route_no_fix_available", iteration=gs.iteration)
-        return "needs_human_review"
+        # Some errors need deeper correction → Editor
+        logger.info("route_editor", iteration=gs.iteration)
+        return "editor"
 
     # ── Build graph ──
 
@@ -122,6 +133,7 @@ def build_graph(
     graph.add_node("director", director_node)  # type: ignore[type-var]
     graph.add_node("actor", actor_node)  # type: ignore[type-var]
     graph.add_node("critic", critic_node)  # type: ignore[type-var]
+    graph.add_node("editor", editor_node)  # type: ignore[type-var]
     graph.add_node("mark_human_review", mark_human_review)  # type: ignore[type-var]
 
     # Add edges
@@ -135,11 +147,14 @@ def build_graph(
         route_after_critic,
         {
             "approved": END,
-            "hotfix": "director",  # Loop back with hints
+            "hotfix": "director",      # Loop back with phoneme hints
+            "editor": "editor",         # Latent inpainting / chunk regen
             "needs_human_review": "mark_human_review",
         },
     )
 
+    # After Editor, re-evaluate with Critic
+    graph.add_edge("editor", "critic")
     graph.add_edge("mark_human_review", END)
 
     return graph

@@ -139,3 +139,28 @@ def _encode_wav(waveform: np.ndarray, sample_rate: int) -> bytes:
     buf.write(data)
 
     return buf.getvalue()
+
+
+def _decode_wav_to_array(wav_bytes: bytes) -> np.ndarray:
+    """Decode WAV bytes to float32 numpy array.
+
+    Shared utility used by Critic and Editor agents.
+
+    Args:
+        wav_bytes: WAV file bytes (16-bit PCM).
+
+    Returns:
+        Audio waveform as float32 array, normalized to [-1, 1].
+    """
+    if len(wav_bytes) < 44:
+        return np.array([], dtype=np.float32)
+
+    data_offset = wav_bytes.find(b"data")
+    if data_offset == -1:
+        return np.array([], dtype=np.float32)
+
+    data_size = struct.unpack("<I", wav_bytes[data_offset + 4 : data_offset + 8])[0]
+    audio_data = wav_bytes[data_offset + 8 : data_offset + 8 + data_size]
+
+    audio_int16 = np.frombuffer(audio_data, dtype=np.int16)
+    return audio_int16.astype(np.float32) / 32767.0
