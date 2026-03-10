@@ -1,0 +1,99 @@
+# =============================================
+# ReflexTTS — Docker Compose (Development)
+# =============================================
+# Usage:
+#   docker compose up -d          # start all services
+#   docker compose ps             # check health
+#   docker compose logs -f app    # tail app logs
+
+services:
+  # ─── vLLM Server (Qwen3-8B-Instruct) ──────
+  vllm:
+    image: vllm/vllm-openai:latest
+    container_name: reflex-vllm
+    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    ports:
+      - "8000:8000"
+    volumes:
+      - vllm-cache:/root/.cache
+    command: >
+      --model Qwen/Qwen3-8B-AWQ
+      --quantization awq
+      --dtype auto
+      --max-model-len 4096
+      --gpu-memory-utilization 0.35
+      --host 0.0.0.0
+      --port 8000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    restart: unless-stopped
+
+  # ─── Redis (Session Management) ────────────
+  redis:
+    image: redis:7-alpine
+    container_name: reflex-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  # ─── Application ──────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.app
+    container_name: reflex-app
+    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./src:/app/src
+      - ./configs:/app/configs
+      - model-cache:/app/pretrained_models
+    env_file:
+      - .env.example
+    environment:
+      - VLLM_BASE_URL=http://vllm:8000/v1
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      vllm:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+
+volumes:
+  vllm-cache:
+  redis-data:
+  model-cache:

@@ -1,0 +1,28 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.9.0
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.14.0
+    hooks:
+      - id: mypy
+        additional_dependencies:
+          - pydantic>=2.10
+          - pydantic-settings>=2.7
+
+  - repo: https://github.com/PyCQA/bandit
+    rev: "1.8.0"
+    hooks:
+      - id: bandit
+        args: ["-ll", "-q", "-r"]
+        files: ^src/
+
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: ["--baseline", ".secrets.baseline"]

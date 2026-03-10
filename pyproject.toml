@@ -1,0 +1,116 @@
+[project]
+name = "reflex-tts"
+version = "0.1.0"
+description = "Multi-Agent System for Self-Correcting Speech Synthesis"
+requires-python = ">=3.12"
+license = { text = "BSD-3-Clause" }
+authors = [{ name = "ReflexTTS Team" }]
+readme = "README.md"
+
+dependencies = [
+    # Core
+    "pydantic>=2.10,<3",
+    "pydantic-settings>=2.7,<3",
+    # Agents & Orchestration
+    "langgraph>=0.4,<1",
+    "langchain-core>=0.3,<1",
+    # Inference clients
+    "openai>=1.60,<2",            # vLLM OpenAI-compatible client
+    "httpx>=0.28,<1",             # Async HTTP
+    # Audio
+    "torchaudio>=2.6,<3",
+    "soundfile>=0.13,<1",
+    "numpy>=2.0,<3",
+    # Logging & Observability
+    "structlog>=25.1,<26",
+    "opentelemetry-api>=1.30,<2",
+    "opentelemetry-sdk>=1.30,<2",
+    # API
+    "fastapi>=0.115,<1",
+    "uvicorn[standard]>=0.34,<1",
+    "websockets>=14.0,<15",
+    # Storage
+    "redis>=5.2,<6",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3,<9",
+    "pytest-asyncio>=0.25,<1",
+    "pytest-cov>=6.0,<7",
+    "ruff>=0.9,<1",
+    "mypy>=1.14,<2",
+    "bandit>=1.8,<2",
+    "detect-secrets>=1.5,<2",
+    "pre-commit>=4.0,<5",
+]
+gpu = [
+    # These are installed separately in Docker / GPU environments
+    # "vllm",
+    # "whisperx",
+    # CosyVoice3 installed from source
+    "torch>=2.6,<3",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+# ── Ruff ──────────────────────────────────────────────
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "N",    # pep8-naming
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "S",    # flake8-bandit
+    "A",    # flake8-builtins
+    "RUF",  # ruff-specific
+]
+ignore = [
+    "S101",  # allow assert in tests
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["src"]
+
+# ── Mypy ──────────────────────────────────────────────
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = [
+    "whisperx.*",
+    "cosyvoice.*",
+    "langgraph.*",
+    "langchain_core.*",
+    "torchaudio.*",
+    "soundfile.*",
+    "redis.*",
+]
+ignore_missing_imports = true
+
+# ── Pytest ────────────────────────────────────────────
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = [
+    "unit: Unit tests (no external dependencies)",
+    "integration: Integration tests (require running services)",
+    "e2e: End-to-end pipeline tests",
+]
