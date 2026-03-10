@@ -30,6 +30,8 @@ class DetectedError(BaseModel):
     end_ms: float
     severity: ErrorSeverity
     description: str = ""
+    can_hotfix: bool = False
+    hotfix_hint: str = ""
 
 
 class AgentLogEntry(BaseModel):
