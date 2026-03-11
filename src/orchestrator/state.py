@@ -32,6 +32,7 @@ class DetectedError(BaseModel):
     description: str = ""
     can_hotfix: bool = False
     hotfix_hint: str = ""
+    segment_index: int = -1
 
 
 class AgentLogEntry(BaseModel):
@@ -61,6 +62,14 @@ class GraphState(BaseModel):
     # ── Actor output ──
     audio_bytes: bytes = b""
     sample_rate: int = 22050
+    segment_audio: list[bytes] = Field(
+        default_factory=list,
+        description="Per-segment WAV audio bytes from Actor",
+    )
+    segment_approved: list[bool] = Field(
+        default_factory=list,
+        description="Per-segment approval status from Critic",
+    )
 
     # ── Critic output ──
     transcript: str = ""

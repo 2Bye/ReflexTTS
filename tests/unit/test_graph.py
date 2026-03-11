@@ -58,3 +58,31 @@ class TestGraphState:
         assert restored.text == "Hello"
         assert restored.voice_id == "speaker_2"
         assert restored.wer == 0.05
+
+    def test_segment_audio_defaults(self) -> None:
+        state = GraphState()
+        assert state.segment_audio == []
+        assert state.segment_approved == []
+
+    def test_segment_tracking_roundtrip(self) -> None:
+        state = GraphState(
+            text="Hello world",
+            segment_audio=[b"wav1", b"wav2"],
+            segment_approved=[True, False],
+        )
+        data = state.model_dump()
+        restored = GraphState.model_validate(data)
+        assert len(restored.segment_audio) == 2
+        assert restored.segment_approved == [True, False]
+
+    def test_detected_error_segment_index(self) -> None:
+        from src.orchestrator.state import DetectedError, ErrorSeverity
+        err = DetectedError(
+            word_expected="king",
+            word_actual="thing",
+            start_ms=100,
+            end_ms=200,
+            severity=ErrorSeverity.CRITICAL,
+            segment_index=1,
+        )
+        assert err.segment_index == 1

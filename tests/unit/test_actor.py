@@ -63,3 +63,28 @@ class TestActorState:
         )
         output = DirectorOutput.model_validate(state.ssml_markup)
         assert output.segments[0].emotion == EmotionTag.HAPPY
+
+    def test_segment_audio_initialized(self) -> None:
+        """GraphState should support segment_audio lists."""
+        state = GraphState(
+            ssml_markup=DirectorOutput(
+                segments=[
+                    Segment(text="One"),
+                    Segment(text="Two"),
+                ],
+            ).model_dump(),
+            segment_audio=[b"", b""],
+            segment_approved=[False, False],
+        )
+        assert len(state.segment_audio) == 2
+        assert all(not a for a in state.segment_approved)
+
+    def test_segment_approved_reuse(self) -> None:
+        """Already-approved segments should be tracked."""
+        wav = _encode_wav(np.zeros(100, dtype=np.float32), 22050)
+        state = GraphState(
+            segment_audio=[wav, b""],
+            segment_approved=[True, False],
+        )
+        assert state.segment_approved[0] is True
+        assert state.segment_approved[1] is False

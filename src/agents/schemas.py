@@ -81,6 +81,10 @@ class CriticError(BaseModel):
         default="",
         description="Phoneme hint for hotfix, e.g. '[sh][ip]'",
     )
+    segment_index: int = Field(
+        default=-1,
+        description="Index of the segment this error belongs to (-1 = unknown)",
+    )
 
 
 class CriticOutput(BaseModel):

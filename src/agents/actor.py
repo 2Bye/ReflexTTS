@@ -25,28 +25,47 @@ async def run_actor(state: GraphState, tts: TTSClient) -> GraphState:
     """Execute the Actor Agent.
 
     Synthesizes speech from Director's segments and produces audio.
+    On retry iterations, only re-synthesizes unapproved segments,
+    reusing cached audio for segments that passed Critic evaluation.
 
     Args:
         state: Current graph state with DirectorOutput in ssml_markup.
         tts: CosyVoice3 TTS client.
 
     Returns:
-        Updated state with audio_bytes.
+        Updated state with audio_bytes and segment_audio.
     """
     director_output = DirectorOutput.model_validate(state.ssml_markup)
     voice_id = director_output.voice_id or state.voice_id
+    num_segments = len(director_output.segments)
 
     logger.info(
         "actor_start",
-        segments=len(director_output.segments),
+        segments=num_segments,
         voice=voice_id,
         iteration=state.iteration,
     )
+
+    # Initialize segment_audio list if needed
+    if len(state.segment_audio) != num_segments:
+        state.segment_audio = [b""] * num_segments
+        state.segment_approved = [False] * num_segments
 
     waveforms: list[np.ndarray] = []
     sample_rate = tts.sample_rate
 
     for i, segment in enumerate(director_output.segments):
+        # Skip re-synthesis for already-approved segments
+        if state.segment_approved[i] and state.segment_audio[i]:
+            logger.info(
+                "actor_segment_cached",
+                segment_index=i,
+                text=segment.text[:50],
+            )
+            seg_wav = _decode_wav_to_array(state.segment_audio[i])
+            waveforms.append(seg_wav)
+            continue
+
         # Insert pause before segment
         if segment.pause_before_ms > 0:
             pause_samples = int(sample_rate * segment.pause_before_ms / 1000)
@@ -78,6 +97,9 @@ async def run_actor(state: GraphState, tts: TTSClient) -> GraphState:
         waveforms.append(result.waveform)
         sample_rate = result.sample_rate
 
+        # Store per-segment audio
+        state.segment_audio[i] = _encode_wav(result.waveform, sample_rate)
+
         logger.info(
             "actor_segment_done",
             segment_index=i,
@@ -94,15 +116,26 @@ async def run_actor(state: GraphState, tts: TTSClient) -> GraphState:
 
     state.audio_bytes = wav_bytes
     state.sample_rate = sample_rate
+
+    # Count how many segments were re-synthesized vs cached
+    cached_count = sum(1 for a in state.segment_approved if a)
+    synth_count = num_segments - cached_count
+
     state.agent_log.append(
-        {"agent": "actor", "action": "synthesized", "detail": f"{len(combined) / sample_rate:.2f}s audio"}  # type: ignore[arg-type]
+        {  # type: ignore[arg-type]
+            "agent": "actor",
+            "action": "synthesized",
+            "detail": f"{len(combined) / sample_rate:.2f}s audio ({synth_count} new, {cached_count} cached)",
+        }
     )
 
     logger.info(
         "actor_done",
         total_duration_s=f"{len(combined) / sample_rate:.2f}",
         wav_size_kb=len(wav_bytes) // 1024,
-        total_segments=len(director_output.segments),
+        total_segments=num_segments,
+        segments_synthesized=synth_count,
+        segments_cached=cached_count,
     )
     return state
 

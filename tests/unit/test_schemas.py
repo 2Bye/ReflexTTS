@@ -108,3 +108,25 @@ class TestCriticOutput:
             CriticOutput(is_approved=True, wer=1.5)
         with pytest.raises(ValidationError):
             CriticOutput(is_approved=True, wer=-0.1)
+
+    def test_segment_index_default(self) -> None:
+        """CriticError defaults segment_index to -1."""
+        error = CriticError(
+            word_expected="hello",
+            word_actual="hallo",
+            start_ms=100.0,
+            end_ms=200.0,
+        )
+        assert error.segment_index == -1
+
+    def test_segment_index_set(self) -> None:
+        """CriticError can have explicit segment_index."""
+        error = CriticError(
+            word_expected="king",
+            word_actual="thing",
+            start_ms=2450.0,
+            end_ms=3100.0,
+            severity=ErrorSeverity.CRITICAL,
+            segment_index=2,
+        )
+        assert error.segment_index == 2

@@ -54,6 +54,7 @@ You will receive:
 - target_text: The text that SHOULD have been spoken.
 - transcript: The text that was ACTUALLY recognized (ASR output).
 - word_timestamps: Optional word-level timestamps from ASR.
+- segment_index: (optional) Which segment is being evaluated.
 
 You MUST respond with a JSON object matching this exact schema:
 {
@@ -67,7 +68,8 @@ You MUST respond with a JSON object matching this exact schema:
       "severity": "critical|warning|info",
       "description": "Wrong word substitution",
       "can_hotfix": false,
-      "hotfix_hint": ""
+      "hotfix_hint": "",
+      "segment_index": 0
     }
   ],
   "wer": 0.05,
@@ -87,6 +89,10 @@ Rules for can_hotfix:
 - TRUE only for mispronunciation errors that could be fixed by adding
   inline phoneme hints (pinyin/CMU) to the text.
 - FALSE for wrong words, missing words, or hallucinations.
+
+Rules for segment_index:
+- If segment_index is provided in the input, use it for ALL errors.
+- If not provided, set to 0.
 
 IMPORTANT: Report at most 5 errors (the most critical ones). Keep the JSON compact.
 

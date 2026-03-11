@@ -96,6 +96,12 @@ def build_graph(
     def route_after_critic(state: dict[str, Any]) -> str:
         """Decide next step based on Critic evaluation.
 
+        Per-segment aware routing:
+        - If all segments approved → END
+        - If max retries → human review
+        - If failed segment errors are all hotfixable → Director
+        - Otherwise → Editor for targeted chunk regen
+
         Returns:
             "approved" - audio is acceptable, go to END
             "hotfix" - retry with pronunciation hints via Director
@@ -112,17 +118,42 @@ def build_graph(
             logger.warning("route_max_retries", iteration=gs.iteration)
             return "needs_human_review"
 
-        # Check if ALL errors are hotfixable
+        # Check errors from unapproved segments only
+        unapproved_errors = [
+            e for e in gs.errors
+            if e.segment_index < 0 or (
+                e.segment_index < len(gs.segment_approved)
+                and not gs.segment_approved[e.segment_index]
+            )
+        ]
+
+        if not unapproved_errors:
+            # No errors but not approved — safety fallback
+            logger.info("route_hotfix_no_errors", iteration=gs.iteration)
+            return "hotfix"
+
         all_hotfixable = all(
-            e.can_hotfix for e in gs.errors
-        ) if gs.errors else False
+            e.can_hotfix for e in unapproved_errors
+        )
 
         if all_hotfixable:
-            logger.info("route_hotfix", iteration=gs.iteration)
+            logger.info(
+                "route_hotfix",
+                iteration=gs.iteration,
+                failed_segments=[
+                    i for i, a in enumerate(gs.segment_approved) if not a
+                ],
+            )
             return "hotfix"
 
         # Some errors need deeper correction → Editor
-        logger.info("route_editor", iteration=gs.iteration)
+        logger.info(
+            "route_editor",
+            iteration=gs.iteration,
+            failed_segments=[
+                i for i, a in enumerate(gs.segment_approved) if not a
+            ],
+        )
         return "editor"
 
     # ── Build graph ──
