@@ -32,7 +32,7 @@ class VLLMConfig(BaseSettings):
     max_tokens: int = 4096
     temperature: float = 0.1
     timeout_seconds: int = 300
-    max_retries: int = 3
+    max_retries: int = 5
 
 
 class CosyVoiceConfig(BaseSettings):
@@ -67,7 +67,7 @@ class SecurityConfig(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="SECURITY_")
 
     max_text_length: int = 5000
-    max_retries: int = 3
+    max_retries: int = 5
     wer_threshold_for_human_review: float = 0.15
     whitelisted_voices: list[str] = Field(
         default=["speaker_1", "speaker_2", "speaker_3"],

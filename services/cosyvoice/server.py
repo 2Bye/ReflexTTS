@@ -117,9 +117,10 @@ async def synthesize(req: SynthesizeRequest):
     try:
         model = _get_model()
 
-        instruct = req.instruct or "Read naturally with clear pronunciation"
-
         # CosyVoice3 LLM requires <|endofprompt|> marker
+        # When no instruct provided, use empty instruct to avoid
+        # the model speaking extra preamble text
+        instruct = req.instruct.strip() if req.instruct else ""
         if "<|endofprompt|>" not in instruct:
             instruct = f"{instruct}<|endofprompt|>"
 

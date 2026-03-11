@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 # ── Director → Actor ──────────────────────────────────
 
@@ -25,6 +25,9 @@ class EmotionTag(StrEnum):
     WHISPER = "whisper"
 
 
+_VALID_EMOTIONS = {e.value for e in EmotionTag}
+
+
 class Segment(BaseModel):
     """A single speech segment produced by the Director.
 
@@ -39,6 +42,15 @@ class Segment(BaseModel):
         default_factory=list,
         description="Inline phoneme hints for tricky words, e.g. ['[j][ǐ]予']",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _fallback_unknown_emotion(cls, data: dict) -> dict:  # type: ignore[type-arg]
+        """Map unknown emotion values to 'neutral' instead of failing."""
+        if isinstance(data, dict) and "emotion" in data:
+            if data["emotion"] not in _VALID_EMOTIONS:
+                data["emotion"] = "neutral"
+        return data
 
 
 class DirectorOutput(BaseModel):

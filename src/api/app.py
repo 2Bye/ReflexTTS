@@ -35,6 +35,9 @@ _store = SessionStore()
 # WebSocket connections per session
 _ws_connections: dict[str, list[WebSocket]] = {}
 
+# Pipeline concurrency limiter — only 1 pipeline at a time (GPU bound)
+_pipeline_semaphore = threading.Semaphore(1)
+
 
 def create_app(config: AppConfig | None = None) -> FastAPI:
     """Create and configure the FastAPI application.
@@ -111,6 +114,12 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         session = _store.create(text=text, voice_id=req.voice_id)
 
         # 5. Launch pipeline in background thread (separate event loop)
+        if not _pipeline_semaphore.acquire(blocking=False):
+            raise HTTPException(
+                status_code=503,
+                detail="Pipeline busy — another synthesis is in progress. Try again later.",
+            )
+
         t = threading.Thread(
             target=_run_pipeline_thread,
             args=(session.session_id, config),
@@ -228,15 +237,29 @@ def _run_pipeline_thread(session_id: str, config: AppConfig) -> None:
     """Thread target: runs pipeline in its own asyncio event loop.
 
     Completely decoupled from the main uvicorn event loop.
+    Has a 300s hard timeout to prevent infinite hangs.
     """
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
-        loop.run_until_complete(_pipeline_impl(session_id, config))
+        loop.run_until_complete(
+            asyncio.wait_for(_pipeline_impl(session_id, config), timeout=300.0)
+        )
+    except TimeoutError:
+        logger.error("pipeline_timeout", session_id=session_id)
+        session = _store.get(session_id)
+        if session:
+            session.status = SessionState.FAILED
+            session.error_message = "Pipeline timed out (300s)"
+            session.agent_log.append(
+                {"agent": "orchestrator", "action": "failed", "detail": "Pipeline timed out (300s)"}
+            )
+            _store.update(session)
     except Exception as e:
         logger.error("pipeline_thread_error", session_id=session_id, error=str(e))
     finally:
         loop.close()
+        _pipeline_semaphore.release()
 
 
 async def _pipeline_impl(session_id: str, config: AppConfig) -> None:
@@ -341,7 +364,7 @@ async def _pipeline_impl(session_id: str, config: AppConfig) -> None:
 def _get_ui_html() -> str:
     """Return the embedded Web UI HTML."""
     return """<!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -450,7 +473,7 @@ audio { width:100%; margin-top:16px; border-radius:8px; }
   <div class="card">
     <h2>📝 Input</h2>
     <textarea id="textInput" placeholder="Enter text to synthesize..."
->Добрый день! Меня зовут Алексей.</textarea>
+>Hello! My name is Alex.</textarea>
     <div class="controls">
       <select id="voiceSelect"></select>
       <button class="btn btn-primary" id="synthesizeBtn" onclick="synthesize()">

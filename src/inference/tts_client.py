@@ -196,14 +196,17 @@ class TTSClient:
         )
 
         try:
+            payload: dict[str, Any] = {
+                "text": text,
+                "speaker_id": voice_info["name"],
+                "speed": 1.0,
+            }
+            if instruct:
+                payload["instruct"] = instruct
+
             resp = await self._client.post(
                 f"{self._base_url}/synthesize",
-                json={
-                    "text": text,
-                    "speaker_id": voice_info["name"],
-                    "instruct": instruct,
-                    "speed": 1.0,
-                },
+                json=payload,
             )
 
             if resp.status_code != 200:

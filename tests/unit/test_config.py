@@ -20,7 +20,7 @@ class TestAppConfig:
         assert "8000" in config.vllm.base_url
         assert config.vllm.max_tokens == 4096
         assert config.vllm.temperature == 0.1
-        assert config.vllm.max_retries == 3
+        assert config.vllm.max_retries == 5
 
     def test_cosyvoice_defaults(self) -> None:
         """CosyVoice3 config defaults."""
@@ -31,8 +31,8 @@ class TestAppConfig:
     def test_security_defaults(self) -> None:
         """Security config has correct guard values."""
         config = AppConfig()
-        assert config.security.max_text_length == 1000
-        assert config.security.max_retries == 3
+        assert config.security.max_text_length == 5000
+        assert config.security.max_retries == 5
         assert config.security.wer_threshold_for_human_review == 0.15
         assert len(config.security.whitelisted_voices) == 3
         assert config.security.enable_pii_masking is True

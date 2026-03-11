@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from src.api.app import create_app
+from src.api.app import _pipeline_semaphore, create_app
 from src.api.schemas import SynthesizeRequest
 from src.api.sessions import SessionState, SessionStore
 from src.config import AppConfig
@@ -15,6 +15,10 @@ from src.config import AppConfig
 def client() -> TestClient:
     config = AppConfig()
     app = create_app(config)
+    # Reset pipeline semaphore to prevent cross-test blocking
+    while not _pipeline_semaphore.acquire(blocking=False):
+        pass
+    _pipeline_semaphore.release()
     return TestClient(app)
 
 
