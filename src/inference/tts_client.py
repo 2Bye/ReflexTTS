@@ -1,9 +1,7 @@
-"""CosyVoice3 TTS client wrapper.
+"""CosyVoice3 TTS client — HTTP microservice mode.
 
-Provides a clean interface over CosyVoice3 AutoModel for:
-- Custom voice generation (with instruct for emotions)
-- Zero-shot voice cloning (with reference audio)
-- Access to internal Flow Matching module (for future inpainting)
+Calls the CosyVoice3 microservice (services/cosyvoice/) via HTTP.
+No local model loading — all inference runs in a separate container.
 
 Usage:
     client = TTSClient(config.cosyvoice)
@@ -16,18 +14,14 @@ Usage:
 
 from __future__ import annotations
 
-import asyncio
+import struct
 from dataclasses import dataclass
-from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import numpy as np
 
 from src.config import CosyVoiceConfig
 from src.log import get_logger
-
-if TYPE_CHECKING:
-    import torch
 
 logger = get_logger(__name__)
 
@@ -37,7 +31,7 @@ class TTSError(Exception):
 
 
 class TTSModelNotLoadedError(TTSError):
-    """Model has not been loaded yet."""
+    """Remote model not available."""
 
 
 class TTSGenerationError(TTSError):
@@ -71,11 +65,50 @@ _VOICE_MAP: dict[str, dict[str, str]] = {
 }
 
 
-class TTSClient:
-    """CosyVoice3 TTS client.
+def _wav_bytes_to_array(wav_bytes: bytes) -> tuple[np.ndarray, int]:
+    """Parse WAV bytes to numpy array + sample rate."""
+    # Read WAV header
+    if wav_bytes[:4] != b"RIFF":
+        msg = "Invalid WAV data"
+        raise TTSGenerationError(msg)
 
-    Wraps CosyVoice3 AutoModel for use by Actor and Editor agents.
-    Supports custom voice, zero-shot cloning, and instruct-based control.
+    # Parse fmt chunk
+    fmt_offset = wav_bytes.index(b"fmt ") + 4
+    _fmt_size = struct.unpack_from("<I", wav_bytes, fmt_offset)[0]
+    (
+        _audio_format,
+        channels,
+        sample_rate,
+        _byte_rate,
+        _block_align,
+        bits_per_sample,
+    ) = struct.unpack_from("<HHIIHH", wav_bytes, fmt_offset + 4)
+
+    # Parse data chunk
+    data_offset = wav_bytes.index(b"data") + 4
+    data_size = struct.unpack_from("<I", wav_bytes, data_offset)[0]
+    raw_data = wav_bytes[data_offset + 4 : data_offset + 4 + data_size]
+
+    # Convert to float32
+    if bits_per_sample == 16:
+        samples = np.frombuffer(raw_data, dtype=np.int16).astype(np.float32) / 32768.0
+    elif bits_per_sample == 32:
+        samples = np.frombuffer(raw_data, dtype=np.float32)
+    else:
+        samples = np.frombuffer(raw_data, dtype=np.int16).astype(np.float32) / 32768.0
+
+    # If stereo, take first channel
+    if channels > 1:
+        samples = samples[::channels]
+
+    return samples, sample_rate
+
+
+class TTSClient:
+    """CosyVoice3 TTS client (HTTP microservice mode).
+
+    Calls the CosyVoice3 container via HTTP instead of loading
+    the model locally. This keeps the app container lightweight.
 
     Attributes:
         config: TTS configuration.
@@ -83,45 +116,43 @@ class TTSClient:
 
     def __init__(self, config: CosyVoiceConfig) -> None:
         self.config = config
-        self._model: Any = None
+        self._base_url = config.base_url.rstrip("/") if config.base_url else ""
         self._loaded = False
+        self._client: Any = None
 
     def load_model(self) -> None:
-        """Load the CosyVoice3 model into GPU memory.
+        """Check that the remote CosyVoice service is reachable.
 
-        This is a blocking operation — call during startup.
-
-        Raises:
-            TTSError: If model loading fails.
+        In microservice mode, this validates connectivity instead
+        of loading a local model.
         """
-        try:
-            # Lazy import — cosyvoice is only available in GPU environments
-            import sys
+        import httpx
 
-            sys.path.append("third_party/Matcha-TTS")
-            from cosyvoice.cli.cosyvoice import AutoModel
-
-            self._model = AutoModel(
-                model_dir=self.config.model_dir,
-                load_vllm=self.config.load_vllm,
-                load_trt=self.config.load_trt,
-                fp16=self.config.fp16,
+        if not self._base_url:
+            logger.warning(
+                "tts_no_base_url",
+                msg="COSYVOICE_BASE_URL not set, synthesize will fail",
             )
-            self._loaded = True
+            return
+
+        try:
+            resp = httpx.get(f"{self._base_url}/health", timeout=10.0)
+            data = resp.json()
+            self._loaded = data.get("status") == "ok"
+            self._client = httpx.AsyncClient(timeout=120.0)
             logger.info(
-                "tts_model_loaded",
-                model_dir=self.config.model_dir,
-                sample_rate=self._model.sample_rate,
+                "tts_service_connected",
+                base_url=self._base_url,
+                model=data.get("model", "unknown"),
+                loaded=data.get("loaded", False),
             )
         except Exception as e:
-            logger.error("tts_model_load_failed", error=str(e))
-            raise TTSError(f"Failed to load CosyVoice3 model: {e}") from e
+            logger.error("tts_service_unreachable", error=str(e))
+            raise TTSError(f"CosyVoice service unreachable: {e}") from e
 
     @property
     def sample_rate(self) -> int:
         """Get the model's output sample rate."""
-        if self._model is not None:
-            return int(self._model.sample_rate)
         return self.config.sample_rate
 
     async def synthesize(
@@ -132,30 +163,30 @@ class TTSClient:
         instruct: str = "",
         language: str = "Auto",
     ) -> AudioResult:
-        """Generate speech from text using a predefined voice.
+        """Generate speech via CosyVoice3 microservice.
 
         Args:
             text: Input text to synthesize.
             voice_id: Whitelisted voice identifier.
             instruct: Optional emotion/style instruction.
-            language: Target language (Auto for auto-detect).
+            language: Target language.
 
         Returns:
             AudioResult with waveform and metadata.
 
         Raises:
-            TTSModelNotLoadedError: Model not loaded.
+            TTSModelNotLoadedError: Service not connected.
             TTSGenerationError: Generation failed.
         """
         self._ensure_loaded()
+        assert self._client is not None
 
         voice_info = _VOICE_MAP.get(voice_id)
         if voice_info is None:
             raise TTSGenerationError(
-                f"Unknown voice_id '{voice_id}'. Available: {list(_VOICE_MAP.keys())}"
+                f"Unknown voice_id '{voice_id}'. "
+                f"Available: {list(_VOICE_MAP.keys())}"
             )
-
-        lang = language if language != "Auto" else voice_info["language"]
 
         logger.info(
             "tts_synthesize_start",
@@ -165,15 +196,26 @@ class TTSClient:
         )
 
         try:
-            waveform = await asyncio.to_thread(
-                self._generate_sync,
-                text=text,
-                speaker=voice_info["name"],
-                language=lang,
-                instruct=instruct,
+            resp = await self._client.post(
+                f"{self._base_url}/synthesize",
+                json={
+                    "text": text,
+                    "speaker_id": voice_info["name"],
+                    "instruct": instruct,
+                    "speed": 1.0,
+                },
             )
 
-            result = AudioResult(waveform=waveform, sample_rate=self.sample_rate)
+            if resp.status_code != 200:
+                detail = resp.text
+                raise TTSGenerationError(
+                    f"CosyVoice returned {resp.status_code}: {detail}"
+                )
+
+            wav_bytes = resp.content
+            waveform, sr = _wav_bytes_to_array(wav_bytes)
+
+            result = AudioResult(waveform=waveform, sample_rate=sr)
             logger.info(
                 "tts_synthesize_done",
                 duration_s=f"{result.duration_seconds:.2f}",
@@ -181,6 +223,8 @@ class TTSClient:
             )
             return result
 
+        except TTSError:
+            raise
         except Exception as e:
             logger.error("tts_synthesize_failed", error=str(e))
             raise TTSGenerationError(f"TTS generation failed: {e}") from e
@@ -188,142 +232,79 @@ class TTSClient:
     async def clone_voice(
         self,
         text: str,
-        ref_audio_path: str | Path,
+        ref_audio_bytes: bytes,
         ref_text: str,
         *,
         instruct: str = "",
     ) -> AudioResult:
-        """Generate speech using zero-shot voice cloning.
-
-        Uses a reference audio clip to clone the speaker's voice.
-        Used by Editor Agent for context-conditioned chunk repair.
+        """Clone voice via CosyVoice3 microservice.
 
         Args:
             text: Text to synthesize with the cloned voice.
-            ref_audio_path: Path to reference audio file.
+            ref_audio_bytes: Reference audio WAV bytes.
             ref_text: Transcript of the reference audio.
-            instruct: Optional system instruction prefix.
+            instruct: Optional instruction prefix.
 
         Returns:
             AudioResult with cloned voice waveform.
-
-        Raises:
-            TTSModelNotLoadedError: Model not loaded.
-            TTSGenerationError: Generation failed.
         """
         self._ensure_loaded()
+        assert self._client is not None
 
-        logger.info(
-            "tts_clone_start",
-            text_length=len(text),
-            ref_audio=str(ref_audio_path),
-        )
+        logger.info("tts_clone_start", text_length=len(text))
 
         try:
-            prompt = f"{instruct}<|endofprompt|>{ref_text}" if instruct else ref_text
-
-            waveform = await asyncio.to_thread(
-                self._clone_sync,
-                text=text,
-                ref_text=prompt,
-                ref_audio_path=str(ref_audio_path),
+            resp = await self._client.post(
+                f"{self._base_url}/clone",
+                data={"text": text, "speaker_id": "cloned"},
+                files={"audio": ("ref.wav", ref_audio_bytes, "audio/wav")},
             )
 
-            result = AudioResult(waveform=waveform, sample_rate=self.sample_rate)
+            if resp.status_code != 200:
+                raise TTSGenerationError(
+                    f"Clone returned {resp.status_code}: {resp.text}"
+                )
+
+            wav_bytes = resp.content
+            waveform, sr = _wav_bytes_to_array(wav_bytes)
+
+            result = AudioResult(waveform=waveform, sample_rate=sr)
             logger.info(
                 "tts_clone_done",
                 duration_s=f"{result.duration_seconds:.2f}",
             )
             return result
 
+        except TTSError:
+            raise
         except Exception as e:
             logger.error("tts_clone_failed", error=str(e))
             raise TTSGenerationError(f"Voice clone failed: {e}") from e
 
-    def _generate_sync(
-        self,
-        text: str,
-        speaker: str,
-        language: str,
-        instruct: str,
-    ) -> np.ndarray:
-        """Synchronous generation using CosyVoice3 AutoModel.
-
-        Runs in a thread pool to avoid blocking the event loop.
-        """
-        assert self._model is not None
-
-        if instruct:
-            # Use instruct2 mode for emotion/style control
-            results = list(
-                self._model.inference_instruct2(
-                    text,
-                    f"You are a helpful assistant. {instruct}<|endofprompt|>",
-                    f"./configs/voices/{speaker}.wav",
-                    stream=False,
-                )
-            )
-        else:
-            # Use custom voice mode
-            results = list(
-                self._model.inference_zero_shot(
-                    text,
-                    f"You are a helpful assistant.<|endofprompt|>{speaker}",
-                    f"./configs/voices/{speaker}.wav",
-                    stream=False,
-                )
-            )
-
-        if not results:
-            raise TTSGenerationError("CosyVoice3 returned empty results")
-
-        # Concatenate all chunks
-        import torch
-
-        waveforms: list[torch.Tensor] = [r["tts_speech"] for r in results]
-        combined = torch.cat(waveforms, dim=-1)
-        return combined.squeeze().cpu().numpy().astype(np.float32)
-
-    def _clone_sync(
-        self,
-        text: str,
-        ref_text: str,
-        ref_audio_path: str,
-    ) -> np.ndarray:
-        """Synchronous voice clone generation."""
-        assert self._model is not None
-
-        results = list(
-            self._model.inference_zero_shot(
-                text,
-                ref_text,
-                ref_audio_path,
-                stream=False,
-            )
-        )
-
-        if not results:
-            raise TTSGenerationError("Voice clone returned empty results")
-
-        import torch
-
-        waveforms: list[torch.Tensor] = [r["tts_speech"] for r in results]
-        combined = torch.cat(waveforms, dim=-1)
-        return combined.squeeze().cpu().numpy().astype(np.float32)
-
     def _ensure_loaded(self) -> None:
-        """Check that the model is loaded."""
-        if not self._loaded or self._model is None:
+        """Check that the remote service is connected."""
+        if not self._loaded or self._client is None:
             raise TTSModelNotLoadedError(
-                "CosyVoice3 model not loaded. Call load_model() first."
+                "CosyVoice service not connected. Call load_model() first."
             )
 
     async def health_check(self) -> bool:
-        """Check if TTS model is loaded and functional."""
-        return self._loaded and self._model is not None
+        """Check if remote CosyVoice service is healthy."""
+        if not self._base_url:
+            return False
+        try:
+            import httpx
+
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.get(f"{self._base_url}/health")
+                return bool(resp.json().get("status") == "ok")
+        except Exception:
+            return False
 
     async def close(self) -> None:
-        """Release model resources."""
-        self._model = None
+        """Close HTTP client."""
+        if self._client is not None:
+            await self._client.aclose()
+            self._client = None
         self._loaded = False
-        logger.info("tts_model_unloaded")
+        logger.info("tts_client_closed")

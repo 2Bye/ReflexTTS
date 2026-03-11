@@ -31,7 +31,7 @@ class VLLMConfig(BaseSettings):
     api_key: str = "not-needed"  # Local vLLM doesn't require auth
     max_tokens: int = 4096
     temperature: float = 0.1
-    timeout_seconds: int = 60
+    timeout_seconds: int = 300
     max_retries: int = 3
 
 
@@ -40,11 +40,12 @@ class CosyVoiceConfig(BaseSettings):
 
     model_config = SettingsConfigDict(env_prefix="COSYVOICE_")
 
+    base_url: str = "http://localhost:9880"
     model_dir: str = "pretrained_models/Fun-CosyVoice3-0.5B"
     load_vllm: bool = True
     load_trt: bool = True
     fp16: bool = False
-    sample_rate: int = 22050
+    sample_rate: int = 24000
 
 
 class WhisperXConfig(BaseSettings):
@@ -52,6 +53,7 @@ class WhisperXConfig(BaseSettings):
 
     model_config = SettingsConfigDict(env_prefix="WHISPERX_")
 
+    base_url: str = "http://localhost:9881"
     model_name: str = "large-v3"
     device: str = "cuda"
     compute_type: str = "float16"
@@ -64,7 +66,7 @@ class SecurityConfig(BaseSettings):
 
     model_config = SettingsConfigDict(env_prefix="SECURITY_")
 
-    max_text_length: int = 1000
+    max_text_length: int = 5000
     max_retries: int = 3
     wer_threshold_for_human_review: float = 0.15
     whitelisted_voices: list[str] = Field(

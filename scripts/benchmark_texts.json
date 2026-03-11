@@ -1,0 +1,402 @@
+[
+  {
+    "id": "ru_simple_01",
+    "text": "Добрый день! Меня зовут Алексей.",
+    "language": "ru",
+    "category": "simple",
+    "difficulty": "easy",
+    "expected_issues": []
+  },
+  {
+    "id": "ru_simple_02",
+    "text": "Завтра ожидается прекрасная погода. Температура поднимется до двадцати пяти градусов.",
+    "language": "ru",
+    "category": "simple",
+    "difficulty": "easy",
+    "expected_issues": []
+  },
+  {
+    "id": "ru_simple_03",
+    "text": "Спасибо за обращение. Ваш запрос будет обработан в течение трёх рабочих дней.",
+    "language": "ru",
+    "category": "simple",
+    "difficulty": "easy",
+    "expected_issues": []
+  },
+  {
+    "id": "ru_dialog_01",
+    "text": "Здравствуйте, как я могу вам помочь? У меня вопрос по доставке заказа.",
+    "language": "ru",
+    "category": "dialog",
+    "difficulty": "easy",
+    "expected_issues": ["intonation_shift"]
+  },
+  {
+    "id": "ru_dialog_02",
+    "text": "Да, конечно! Подождите, пожалуйста. Сейчас проверю информацию по вашему номеру.",
+    "language": "ru",
+    "category": "dialog",
+    "difficulty": "easy",
+    "expected_issues": []
+  },
+  {
+    "id": "ru_dialog_03",
+    "text": "Нет, к сожалению, это невозможно. Но я могу предложить альтернативный вариант.",
+    "language": "ru",
+    "category": "dialog",
+    "difficulty": "medium",
+    "expected_issues": ["negation_tone"]
+  },
+  {
+    "id": "ru_names_01",
+    "text": "Встречу проведёт Анастасия Владимировна Петрова-Сидоренко.",
+    "language": "ru",
+    "category": "names",
+    "difficulty": "medium",
+    "expected_issues": ["compound_surname"]
+  },
+  {
+    "id": "ru_names_02",
+    "text": "Следующий доклад представит профессор Константин Эдуардович Циолковский.",
+    "language": "ru",
+    "category": "names",
+    "difficulty": "medium",
+    "expected_issues": ["patronymic"]
+  },
+  {
+    "id": "ru_names_03",
+    "text": "Генеральный директор компании Роснефть Игорь Иванович Сечин подтвердил участие.",
+    "language": "ru",
+    "category": "names",
+    "difficulty": "hard",
+    "expected_issues": ["proper_noun", "company_name"]
+  },
+  {
+    "id": "ru_abbreviations_01",
+    "text": "По данным МВД РФ, уровень ДТП снизился на 15% по сравнению с прошлым годом.",
+    "language": "ru",
+    "category": "abbreviations",
+    "difficulty": "medium",
+    "expected_issues": ["abbreviation_expansion"]
+  },
+  {
+    "id": "ru_abbreviations_02",
+    "text": "Согласно ФЗ №152 о персональных данных, ООО «Техносервис» обязано уведомить ФСТЭК.",
+    "language": "ru",
+    "category": "abbreviations",
+    "difficulty": "hard",
+    "expected_issues": ["abbreviation_expansion", "legal_terms"]
+  },
+  {
+    "id": "ru_abbreviations_03",
+    "text": "ВВП страны вырос на 3,2% в I квартале 2025 г.",
+    "language": "ru",
+    "category": "abbreviations",
+    "difficulty": "hard",
+    "expected_issues": ["roman_numeral", "abbreviation_expansion"]
+  },
+  {
+    "id": "ru_numbers_01",
+    "text": "Стоимость проекта составляет 1 234 567 рублей и 89 копеек.",
+    "language": "ru",
+    "category": "numbers",
+    "difficulty": "medium",
+    "expected_issues": ["large_number"]
+  },
+  {
+    "id": "ru_numbers_02",
+    "text": "Позвоните по номеру +7 (495) 123-45-67 в рабочие часы с 9:00 до 18:30.",
+    "language": "ru",
+    "category": "numbers",
+    "difficulty": "hard",
+    "expected_issues": ["phone_number", "time"]
+  },
+  {
+    "id": "ru_numbers_03",
+    "text": "Дата рождения: 17 марта 1987 года. Паспорт серия 45 12, номер 345678.",
+    "language": "ru",
+    "category": "numbers",
+    "difficulty": "hard",
+    "expected_issues": ["date", "document_number"]
+  },
+  {
+    "id": "ru_homographs_01",
+    "text": "Старинный замок стоял на холме, а замок на двери был сломан.",
+    "language": "ru",
+    "category": "homographs",
+    "difficulty": "hard",
+    "expected_issues": ["stress_ambiguity"]
+  },
+  {
+    "id": "ru_homographs_02",
+    "text": "Мука просеивается через сито, а мука ожидания невыносима.",
+    "language": "ru",
+    "category": "homographs",
+    "difficulty": "hard",
+    "expected_issues": ["stress_ambiguity"]
+  },
+  {
+    "id": "ru_homographs_03",
+    "text": "Она уже села в кресло, а деревня, где мы живём, — это село.",
+    "language": "ru",
+    "category": "homographs",
+    "difficulty": "hard",
+    "expected_issues": ["stress_ambiguity"]
+  },
+  {
+    "id": "ru_emotion_01",
+    "text": "Ура! Мы выиграли! Это невероятно! Я так счастлив!",
+    "language": "ru",
+    "category": "emotion",
+    "difficulty": "medium",
+    "expected_issues": ["exclamation_prosody"]
+  },
+  {
+    "id": "ru_emotion_02",
+    "text": "Мне очень жаль. Примите мои искренние соболезнования.",
+    "language": "ru",
+    "category": "emotion",
+    "difficulty": "medium",
+    "expected_issues": ["sadness_tone"]
+  },
+  {
+    "id": "ru_emotion_03",
+    "text": "Это совершенно неприемлемо! Как вы могли допустить такую ошибку?",
+    "language": "ru",
+    "category": "emotion",
+    "difficulty": "medium",
+    "expected_issues": ["anger_tone"]
+  },
+  {
+    "id": "ru_long_01",
+    "text": "Уважаемые коллеги, сегодня я хочу представить вам результаты квартального отчёта нашей компании. За последние три месяца мы достигли значительных результатов в области продаж, увеличив общий оборот на двадцать три процента по сравнению с аналогичным периодом прошлого года. Отдел маркетинга провёл масштабную рекламную кампанию, которая привлекла более пятнадцати тысяч новых клиентов.",
+    "language": "ru",
+    "category": "long",
+    "difficulty": "hard",
+    "expected_issues": ["long_text", "consistency"]
+  },
+  {
+    "id": "ru_long_02",
+    "text": "В связи с обновлением политики конфиденциальности, просим вас ознакомиться с новыми условиями обработки персональных данных. Все изменения вступают в силу с первого января следующего года. В случае несогласия с новыми условиями, вы можете направить письменный отказ на адрес нашего юридического департамента.",
+    "language": "ru",
+    "category": "long",
+    "difficulty": "hard",
+    "expected_issues": ["formal_register", "long_text"]
+  },
+  {
+    "id": "ru_technical_01",
+    "text": "Для настройки сервера установите Nginx версии 1.25 и откройте порт 443 для HTTPS.",
+    "language": "ru",
+    "category": "technical",
+    "difficulty": "hard",
+    "expected_issues": ["technical_terms", "version_number"]
+  },
+  {
+    "id": "ru_technical_02",
+    "text": "Используйте API endpoint /v2/users для получения JSON-ответа с кодом 200.",
+    "language": "ru",
+    "category": "technical",
+    "difficulty": "hard",
+    "expected_issues": ["technical_terms", "mixed_lang"]
+  },
+  {
+    "id": "en_simple_01",
+    "text": "Good morning! Welcome to our presentation today.",
+    "language": "en",
+    "category": "simple",
+    "difficulty": "easy",
+    "expected_issues": []
+  },
+  {
+    "id": "en_simple_02",
+    "text": "The weather forecast predicts sunny skies with temperatures around seventy-five degrees.",
+    "language": "en",
+    "category": "simple",
+    "difficulty": "easy",
+    "expected_issues": []
+  },
+  {
+    "id": "en_names_01",
+    "text": "Dr. Elizabeth Schwarzenegger will be presenting at the MIT conference.",
+    "language": "en",
+    "category": "names",
+    "difficulty": "medium",
+    "expected_issues": ["foreign_surname"]
+  },
+  {
+    "id": "en_technical_01",
+    "text": "Configure the PostgreSQL database with SSL/TLS encryption on port 5432.",
+    "language": "en",
+    "category": "technical",
+    "difficulty": "hard",
+    "expected_issues": ["technical_terms"]
+  },
+  {
+    "id": "en_numbers_01",
+    "text": "Our revenue reached $12.5 million in Q3 2025, a 18.7% increase year-over-year.",
+    "language": "en",
+    "category": "numbers",
+    "difficulty": "hard",
+    "expected_issues": ["currency", "percentage"]
+  },
+  {
+    "id": "zh_simple_01",
+    "text": "大家好，欢迎来到今天的会议。",
+    "language": "zh",
+    "category": "simple",
+    "difficulty": "easy",
+    "expected_issues": []
+  },
+  {
+    "id": "zh_simple_02",
+    "text": "明天的天气预报显示，气温将达到三十度。",
+    "language": "zh",
+    "category": "simple",
+    "difficulty": "easy",
+    "expected_issues": []
+  },
+  {
+    "id": "zh_names_01",
+    "text": "清华大学校长邱勇教授将出席本次论坛。",
+    "language": "zh",
+    "category": "names",
+    "difficulty": "medium",
+    "expected_issues": ["proper_noun"]
+  },
+  {
+    "id": "zh_homophone_01",
+    "text": "银行的行长正在行走。",
+    "language": "zh",
+    "category": "homographs",
+    "difficulty": "hard",
+    "expected_issues": ["polyphone"]
+  },
+  {
+    "id": "zh_numbers_01",
+    "text": "公司2024年营收达到了1.5亿元人民币。",
+    "language": "zh",
+    "category": "numbers",
+    "difficulty": "medium",
+    "expected_issues": ["large_number"]
+  },
+  {
+    "id": "mixed_ruen_01",
+    "text": "Для авторизации используйте ваш Google Account и нажмите кнопку Sign In.",
+    "language": "mixed_ru_en",
+    "category": "mixed_language",
+    "difficulty": "hard",
+    "expected_issues": ["code_switching"]
+  },
+  {
+    "id": "mixed_ruen_02",
+    "text": "Обновление firmware версии 3.2.1 доступно на странице Download Center.",
+    "language": "mixed_ru_en",
+    "category": "mixed_language",
+    "difficulty": "hard",
+    "expected_issues": ["code_switching", "technical_terms"]
+  },
+  {
+    "id": "mixed_ruzh_01",
+    "text": "Китайская компания 华为 представила новый смартфон на выставке в Москве.",
+    "language": "mixed_ru_zh",
+    "category": "mixed_language",
+    "difficulty": "hard",
+    "expected_issues": ["code_switching", "chinese_in_russian"]
+  },
+  {
+    "id": "edge_punctuation_01",
+    "text": "Что? Правда?! Вы уверены... Хм, интересно.",
+    "language": "ru",
+    "category": "edge_case",
+    "difficulty": "medium",
+    "expected_issues": ["punctuation_prosody"]
+  },
+  {
+    "id": "edge_url_01",
+    "text": "Подробности на сайте www.example.com/products/new-item",
+    "language": "ru",
+    "category": "edge_case",
+    "difficulty": "hard",
+    "expected_issues": ["url_reading"]
+  },
+  {
+    "id": "edge_repeat_01",
+    "text": "Нет, нет, нет! Я категорически не согласен!",
+    "language": "ru",
+    "category": "edge_case",
+    "difficulty": "medium",
+    "expected_issues": ["repetition"]
+  },
+  {
+    "id": "edge_whisper_01",
+    "text": "Тише, тише... Не разбуди ребёнка.",
+    "language": "ru",
+    "category": "edge_case",
+    "difficulty": "hard",
+    "expected_issues": ["whisper_tone"]
+  },
+  {
+    "id": "edge_list_01",
+    "text": "В корзину добавлены: молоко, хлеб, яйца, масло и сыр.",
+    "language": "ru",
+    "category": "edge_case",
+    "difficulty": "medium",
+    "expected_issues": ["enumeration"]
+  },
+  {
+    "id": "edge_poetry_01",
+    "text": "У лукоморья дуб зелёный, златая цепь на дубе том, и днём и ночью кот учёный всё ходит по цепи кругом.",
+    "language": "ru",
+    "category": "edge_case",
+    "difficulty": "hard",
+    "expected_issues": ["rhythm", "archaic_words"]
+  },
+  {
+    "id": "edge_email_01",
+    "text": "Отправьте документ на почту info@company.ru до конца рабочего дня.",
+    "language": "ru",
+    "category": "edge_case",
+    "difficulty": "medium",
+    "expected_issues": ["email_reading"]
+  },
+  {
+    "id": "stress_test_01",
+    "text": "А",
+    "language": "ru",
+    "category": "stress_test",
+    "difficulty": "easy",
+    "expected_issues": ["minimal_input"]
+  },
+  {
+    "id": "stress_test_02",
+    "text": "!!!???...",
+    "language": "ru",
+    "category": "stress_test",
+    "difficulty": "hard",
+    "expected_issues": ["punctuation_only"]
+  },
+  {
+    "id": "stress_test_03",
+    "text": "Аббревиатура ВНИИГИПРОЦЕМЕНТМАШАВТОМАТИЗАЦИЯ является одной из самых длинных в русском языке.",
+    "language": "ru",
+    "category": "stress_test",
+    "difficulty": "hard",
+    "expected_issues": ["extremely_long_word"]
+  },
+  {
+    "id": "fantasy_names_01",
+    "text": "Великий маг Гэндальф встретил Фродо Бэггинса у входа в Ривенделл.",
+    "language": "ru",
+    "category": "fantasy_names",
+    "difficulty": "hard",
+    "expected_issues": ["fantasy_proper_nouns"]
+  },
+  {
+    "id": "fantasy_names_02",
+    "text": "Дейенерис Таргариен, мать драконов, правила семью королевствами.",
+    "language": "ru",
+    "category": "fantasy_names",
+    "difficulty": "hard",
+    "expected_issues": ["fantasy_proper_nouns"]
+  }
+]

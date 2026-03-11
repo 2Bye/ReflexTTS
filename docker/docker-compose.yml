@@ -1,99 +1,146 @@
 # =============================================
-# ReflexTTS — Docker Compose (Development)
+# ReflexTTS — Docker Compose (Microservices)
 # =============================================
 # Usage:
 #   docker compose up -d          # start all services
 #   docker compose ps             # check health
 #   docker compose logs -f app    # tail app logs
+#
+# All services use host networking:
+#   vLLM:      http://localhost:8055
+#   CosyVoice: http://localhost:9880
+#   WhisperX:  http://localhost:9881
+#   Redis:     localhost:8056
+#   App:       http://localhost:8081
 
 services:
-  # ─── vLLM Server (Qwen3-8B-Instruct) ──────
+  # ─── vLLM Server (Qwen3-8B-Instruct) ── GPU 1 (A4000 16GB)
   vllm:
     image: vllm/vllm-openai:latest
     container_name: reflex-vllm
+    network_mode: host
     runtime: nvidia
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
-    ports:
-      - "8000:8000"
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=1
     volumes:
-      - vllm-cache:/root/.cache
+      - /mnt/nvme_raid/byebye/ReflexTTS/models/vllm:/root/.cache
     command: >
       --model Qwen/Qwen3-8B-AWQ
-      --quantization awq
+      --quantization awq_marlin
       --dtype auto
-      --max-model-len 4096
-      --gpu-memory-utilization 0.35
+      --max-model-len 16384
+      --gpu-memory-utilization 0.7
       --host 0.0.0.0
-      --port 8000
+      --port 8055
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8055/health"]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 120s
     restart: unless-stopped
 
+  # ─── CosyVoice3 TTS Service ── GPU 2 (A4000 16GB)
+  cosyvoice:
+    build:
+      context: ../services/cosyvoice
+      dockerfile: Dockerfile
+    container_name: reflex-cosyvoice
+    network_mode: host
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=2
+      - COSYVOICE_MODEL=FunAudioLLM/Fun-CosyVoice3-0.5B-2512
+      - PORT=9880
+      - PRELOAD=1
+    volumes:
+      - /mnt/nvme_raid/byebye/ReflexTTS/models/cosyvoice/huggingface:/root/.cache/huggingface
+      - /mnt/nvme_raid/byebye/ReflexTTS/models/cosyvoice/modelscope:/root/.cache/modelscope
+      - ../services/cosyvoice/server.py:/app/server.py
+      - ../services/cosyvoice/default_prompt.wav:/app/default_prompt.wav
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9880/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 300s
+    restart: unless-stopped
+
+  # ─── WhisperX ASR Service ── GPU 2 (A4000 16GB, shared with CosyVoice)
+  whisperx:
+    build:
+      context: ../services/whisperx
+      dockerfile: Dockerfile
+    container_name: reflex-whisperx
+    network_mode: host
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=2
+      - WHISPERX_MODEL=large-v3
+      - PORT=9881
+      - PRELOAD=1
+    volumes:
+      - /mnt/nvme_raid/byebye/ReflexTTS/models/whisperx:/root/.cache/huggingface
+      - ../services/whisperx/server.py:/app/server.py
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9881/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 180s
+    restart: unless-stopped
+
   # ─── Redis (Session Management) ────────────
   redis:
     image: redis:7-alpine
     container_name: reflex-redis
-    ports:
-      - "6379:6379"
+    network_mode: host
     volumes:
-      - redis-data:/data
-    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+      - /mnt/nvme_raid/byebye/ReflexTTS/data/redis:/data
+    command: redis-server --port 8056 --maxmemory 256mb --maxmemory-policy allkeys-lru
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-p", "8056", "ping"]
       interval: 10s
       timeout: 5s
       retries: 3
     restart: unless-stopped
 
-  # ─── Application ──────────────────────────
+  # ─── Application (lightweight) ─────────────
   app:
     build:
-      context: .
+      context: ..
       dockerfile: docker/Dockerfile.app
     container_name: reflex-app
-    runtime: nvidia
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
-    ports:
-      - "8080:8080"
+    network_mode: host
     volumes:
-      - ./src:/app/src
-      - ./configs:/app/configs
-      - model-cache:/app/pretrained_models
+      - ../src:/app/src
+      - /mnt/nvme_raid/byebye/ReflexTTS/data/sessions:/app/data
     env_file:
-      - .env.example
+      - ../.env.example
     environment:
-      - VLLM_BASE_URL=http://vllm:8000/v1
-      - REDIS_URL=redis://redis:6379/0
+      - VLLM_BASE_URL=http://localhost:8055/v1
+      - COSYVOICE_BASE_URL=http://localhost:9880
+      - WHISPERX_BASE_URL=http://localhost:9881
+      - REDIS_URL=redis://localhost:8056/0
+      - API_HOST=0.0.0.0
+      - API_PORT=8081
+      - SECURITY_MAX_TEXT_LENGTH=5000
+      - VLLM_TIMEOUT_SECONDS=300
     depends_on:
       vllm:
+        condition: service_healthy
+      cosyvoice:
+        condition: service_healthy
+      whisperx:
         condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
       interval: 15s
       timeout: 5s
       retries: 3
-      start_period: 60s
+      start_period: 30s
     restart: unless-stopped
+    command: ["uvicorn", "src.api.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8081", "--log-level", "info"]
 
-volumes:
-  vllm-cache:
-  redis-data:
-  model-cache:

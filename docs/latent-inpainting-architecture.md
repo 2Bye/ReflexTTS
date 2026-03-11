@@ -43,27 +43,3 @@ To let the Editor Agent know *exactly where* to cut the audio, forced phonetic a
 ### Step 5: Decoding & Validation
 * The stitched latent tensor is passed through a Vocoder to output the final WAV signal without phase loss.
 * The Orchestrator sends the audio back to the Critic Agent for re-validation. If WER = 0, the loop terminates.
-
----
-
-## 3. Technology Stack (Recommended Models for 2025-2026)
-
-For a PhD dissertation, you do not need to train foundation models from scratch. Your scientific contribution focuses on orchestration and inference modification.
-
-| Component / Agent | Recommended Tech | Justification |
-| :--- | :--- | :--- |
-| **MAS Orchestrator** | `LangGraph` (LangChain) | Ideal framework for creating State Machines with reflection loops. Allows passing tensors and masks within the `State`. |
-| **Director & Critic (LLM)** | `GPT-4o` / `Claude 3.5` (API) or `Llama-3-8B` (Local) | Performs semantic analysis. `Structured Outputs` (guaranteed JSON response) are strictly required for reliable error-diff passing. |
-| **Critic (ASR + Aligner)** | `WhisperX` (VGG Oxford) | **Mission-critical.** Unlike base Whisper, it uses Wav2Vec2/Phoneme-based VAD for **Forced Alignment**. Outputs word-level timestamps essential for masking. |
-| **Actor & Editor (TTS Engine)** | `F5-TTS` (E-Space / SWJTU) | **Current SOTA.** Flow-Matching TTS based on DiT. Natively supports Inpainting (Sway Sampling) and Zero-Shot cloning. Operates directly on Mel-spectrograms. *Alternative: `CosyVoice`.* |
-| **Vocoder** | `Vocos` | Fast and lightweight vocoder. Excellent at reconstructing phase from F5-TTS Mel-spectrograms, avoiding "robotic" metallic artifacts. |
-
----
-
-## 4. Areas of Scientific Novelty (Research Focus for PhD)
-
-While programming this pipeline, you will tackle several open research problems suitable for a dissertation:
-
-1. **Dynamic Duration Modification Algorithm:** Developing a heuristic or predictor that accurately calculates exactly how many milliseconds the mask $M$ needs to be expanded or contracted based on the phonetic composition of the old vs. new word.
-2. **Boundary Bleeding Optimization:** If the mask is cut exactly at the word boundaries, micro-pauses, breaths, or room reverberation might be unnaturally truncated. Research is needed to find the optimal `masking_padding` size (e.g., expanding the mask by $\pm 50$ ms) so the diffusion process smoothly stitches the acoustics.
-3. **Convergence Condition (Reward Metric):** Formulating a reward metric for the Orchestrator Agent. How do we mathematically prove that the audio is *better* after inpainting? Example composite metric: $Score = \alpha \cdot \text{WER} + \beta \cdot \text{SECS} (\text{Speaker Similarity}) + \gamma \cdot \text{FAD}$.

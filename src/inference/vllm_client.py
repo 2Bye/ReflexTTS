@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from typing import TypeVar
 
 from openai import APIConnectionError, APIStatusError, APITimeoutError, AsyncOpenAI
@@ -27,6 +28,44 @@ from src.log import get_logger
 logger = get_logger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
+
+# Regex to strip Qwen3 <think>...</think> reasoning blocks
+_THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
+
+
+def _extract_json_object(text: str) -> str | None:
+    """Extract the first balanced JSON object from text.
+
+    Uses brace counting to find {…} even if there's trailing garbage.
+    """
+    start = text.find("{")
+    if start == -1:
+        return None
+
+    depth = 0
+    in_string = False
+    escape = False
+
+    for i, ch in enumerate(text[start:], start):
+        if escape:
+            escape = False
+            continue
+        if ch == "\\":
+            escape = True
+            continue
+        if ch == '"' and not escape:
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start : i + 1]
+
+    return None
 
 
 class VLLMError(Exception):
@@ -128,10 +167,30 @@ class VLLMClient:
             json_mode=True,
         )
 
+        # Strip Qwen3 <think>...</think> reasoning blocks
+        logger.info("vllm_raw_response", raw_length=len(raw), raw_preview=raw[:300])
+        raw = _THINK_RE.sub("", raw).strip()
+        logger.info("vllm_cleaned_response", cleaned_length=len(raw), cleaned=raw[:500])
+
         try:
             data = json.loads(raw)
             return response_model.model_validate(data)
         except (json.JSONDecodeError, ValueError) as e:
+            # Fallback: try to extract first valid JSON object from response
+            logger.warning(
+                "vllm_json_parse_retry",
+                error=str(e),
+                attempting="brace_extraction",
+            )
+            extracted = _extract_json_object(raw)
+            if extracted:
+                try:
+                    data = json.loads(extracted)
+                    logger.info("vllm_json_extracted", length=len(extracted))
+                    return response_model.model_validate(data)
+                except (json.JSONDecodeError, ValueError):
+                    pass
+
             logger.error(
                 "vllm_json_parse_error",
                 error=str(e),

@@ -60,6 +60,14 @@ async def run_actor(state: GraphState, tts: TTSClient) -> GraphState:
         if segment.emotion.value != "neutral":
             instruct = f"Speak with {segment.emotion.value} tone and feeling."
 
+        logger.info(
+            "actor_segment_start",
+            segment_index=i,
+            text=text,
+            emotion=segment.emotion.value,
+            instruct=instruct,
+        )
+
         # Synthesize this segment
         result = await tts.synthesize(
             text=text,
@@ -70,10 +78,12 @@ async def run_actor(state: GraphState, tts: TTSClient) -> GraphState:
         waveforms.append(result.waveform)
         sample_rate = result.sample_rate
 
-        logger.debug(
+        logger.info(
             "actor_segment_done",
             segment_index=i,
             duration_s=f"{result.duration_seconds:.2f}",
+            waveform_samples=len(result.waveform),
+            sample_rate=result.sample_rate,
         )
 
     # Concatenate all segments
@@ -92,6 +102,7 @@ async def run_actor(state: GraphState, tts: TTSClient) -> GraphState:
         "actor_done",
         total_duration_s=f"{len(combined) / sample_rate:.2f}",
         wav_size_kb=len(wav_bytes) // 1024,
+        total_segments=len(director_output.segments),
     )
     return state
 

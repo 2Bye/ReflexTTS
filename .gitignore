@@ -1,5 +1,6 @@
 # ── Project-specific ──
 data/
+docs/walkthrough-*.md
 *.wav
 *.mp3
 *.flac

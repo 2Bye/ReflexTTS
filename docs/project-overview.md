@@ -9,16 +9,17 @@
 
 | Milestone | Статус | Тесты | Описание |
 |-----------|--------|-------|----------|
-| M0: Инфраструктура | ✅ Готов | 12 | Структура, config, Docker, CI/CD |
-| M1: Inference Backend | ✅ Готов | 45 | vLLM, CosyVoice3, WhisperX клиенты |
-| M2: Агентный пайплайн | ✅ Готов | 73 | Director, Actor, Critic, LangGraph |
-| M3: Editor + Inpainting | ✅ Готов | 94 | Editor, audio utils, convergence metrics |
-| M4: Security & Governance | 🔲 | — | Input sanitizer, PII, whitelist |
-| M5: API & Web UI | 🔲 | — | FastAPI, WebSocket, UI |
-| M6: Benchmarks | 🔲 | — | WER, SECS, PESQ, load testing |
-| M7: Production | 🔲 | — | PyTriton, monitoring, K8s |
+| M0: Инфраструктура | ✅ | 12 | Структура, config, Docker, CI/CD |
+| M1: Inference Backend | ✅ | 45 | vLLM, CosyVoice3, WhisperX клиенты |
+| M2: Агентный пайплайн | ✅ | 73 | Director, Actor, Critic, LangGraph |
+| M3: Editor + Inpainting | ✅ | 94 | Editor, audio utils, convergence |
+| M4: Security & Governance | ✅ | 119 | Sanitizer, PII masker, whitelist |
+| M5: API & Web UI | ✅ | 136 | FastAPI, WebSocket, Web UI |
+| M6: Benchmarking | ✅ | 148 | 50 texts, benchmark runner, locust |
+| M7: Production | ✅ | 158 | Prometheus metrics, /metrics |
+| M8: E2E Integration | ✅ | 158 | Full pipeline: vLLM + CosyVoice3 + WhisperX |
 
-**Проверки:** `ruff check` ✅ · `mypy --strict` ✅ (26 файлов, 0 ошибок) · `pytest` ✅ (94/94)
+**Проверки:** `ruff check` ✅ · `mypy --strict` ✅ (33 файла) · `pytest` ✅ (158/158)
 
 ---
 
@@ -85,12 +86,20 @@ src/
 │   ├── state.py                 # GraphState, DetectedError, AgentLogEntry
 │   └── graph.py                 # build_graph() — 4-way routing
 │
-├── api/                         # M5 (stub)
+├── api/                         # M5 — API + Web UI
 │   ├── __init__.py
-│   └── app.py                   # FastAPI factory: /health, /voices
+│   ├── app.py                   # FastAPI + all endpoints + embedded UI
+│   ├── schemas.py               # SynthesizeRequest, SessionStatus
+│   └── sessions.py              # In-memory session store (PoC)
 │
-└── security/                    # M4 (пустой)
-    └── __init__.py
+├── security/                    # M4 — Security
+│   ├── __init__.py
+│   ├── input_sanitizer.py       # Prompt injection guard (10 patterns)
+│   ├── pii_masker.py            # Email/phone/card/passport/INN/IP mask
+│   └── voice_whitelist.py       # Whitelist + clone blocking
+│
+└── monitoring/                  # M7 — Prometheus metrics
+    └── __init__.py              # Counter, Gauge, Histogram, MetricsRegistry
 ```
 
 ### `tests/` — тесты
@@ -110,7 +119,11 @@ tests/
     ├── test_critic.py           # 5 тестов — WAV decode, text extraction
     ├── test_graph.py            # 4 теста — graph construction, state
     ├── test_audio.py            # 18 тестов — alignment, mask, crossfade, metrics
-    └── test_editor.py           # 3 теста — skip paths, fallback
+    ├── test_editor.py           # 3 теста — skip paths, fallback
+    ├── test_security.py         # 25 тестов — injection, PII, voice whitelist
+    ├── test_api.py              # 17 тестов — endpoints, sessions, schemas
+    ├── test_benchmarks.py       # 12 тестов — texts, summary, report
+    └── test_monitoring.py       # 10 тестов — Counter, Gauge, Histogram
 ```
 
 ### `docker/` + CI/CD
@@ -135,7 +148,20 @@ docs/
 ├── walkthrough-m0-infrastructure.md   # Walkthrough M0
 ├── walkthrough-m1-inference.md        # Walkthrough M1
 ├── walkthrough-m2-agents.md           # Walkthrough M2
-└── walkthrough-m3-editor.md           # Walkthrough M3
+├── walkthrough-m3-editor.md           # Walkthrough M3
+├── walkthrough-m4-security.md         # Walkthrough M4
+├── walkthrough-m5-api.md              # Walkthrough M5
+├── walkthrough-m6-benchmarks.md       # Walkthrough M6
+└── walkthrough-m7-production.md       # Walkthrough M7
+```
+
+### `scripts/` — M6 benchmarks
+
+```
+scripts/
+├── benchmark_texts.json     # 50 тестовых текстов (RU/EN/ZH/mixed)
+├── run_benchmarks.py        # Прогон + WER/latency/RTF отчёт
+└── load_test.py             # Locust нагрузочный тест
 ```
 
 ---
@@ -209,36 +235,47 @@ pip install -e ".[dev]"
 # Проверки
 ruff check src/ tests/         # Lint
 python -m mypy src/             # Type check
-python -m pytest tests/unit/ -v # Тесты (94 шт)
+python -m pytest tests/unit/ -v # Тесты (158 шт)
 
-# Docker (требует GPU)
+# Запуск Web UI (без GPU)
+python -m uvicorn src.api.app:create_app --factory --port 8080
+# Откройте http://localhost:8080
+
+# Prometheus метрики
+curl http://localhost:8080/metrics
+
+# Docker (с GPU)
 cd docker && docker compose up -d
+
+# Бенчмарки (когда стек поднят)
+python scripts/run_benchmarks.py
 ```
 
----
+## E2E интеграция (M8)
 
-## Что дальше (M4–M7)
+Полный пайплайн протестирован end-to-end с реальными GPU-сервисами:
 
-### M4: Security & Governance (~1 неделя)
-- `input_sanitizer.py` — prompt injection guard (regex + LLM classifier)
-- `pii_masker.py` — NER маскирование → деанонимизация перед TTS
-- `voice_whitelist.py` — только 3 разрешённых голоса
-- Ephemeral data: tmpfs, auto-cleanup
-- Human-in-the-Loop: WER > 15% → блокировка → оператор
+| Сервис | Порт | GPU | Модель |
+|--------|------|-----|--------|
+| vLLM | :8055 | GPU 1 | Qwen3-8B-AWQ (16k ctx) |
+| CosyVoice3 | :9880 | GPU 2 | Fun-CosyVoice3-0.5B |
+| WhisperX | :9881 | GPU 2 | large-v3 |
+| App (FastAPI) | :8081 | CPU | — |
+| Redis | :8056 | CPU | — |
 
-### M5: API & Web UI (~1.5 недели)
-- `POST /synthesize`, `GET /voices`, `GET /session/{id}/status`
-- WebSocket: real-time стриминг agent log
-- Web UI: ввод текста, выбор голоса, progress bar, audio player
-- Redis: session state + TTL cleanup
+**Результаты:**
+- Короткий текст: Director → Actor → Critic → ✅ approved (WER=0.0, ~15s)
+- Длинный текст: Director (Qwen3) выделяет сегменты → Actor (CosyVoice3) синтезирует → Critic (WhisperX + Qwen3 Judge) верифицирует
 
-### M6: Benchmarking (~1.5 недели)
-- 50 текстов: диалоги, имена, аббревиатуры, омографы, mixed-language
-- A/B: latent inpainting vs hotfix vs full-regen
-- Целевые метрики: WER < 1%, SECS > 0.85, avg loops < 2.5, RTF < 4.0
+```bash
+# Запуск всего стека
+cd docker && docker compose up -d
 
-### M7: Production (~1 неделя)
-- PyTriton обёртки для CosyVoice3 + WhisperX (dynamic batching)
-- Prometheus + Grafana dashboards
-- Alerting: GPU OOM, error rate, avg loops > 3
-- Kubernetes manifests
+# E2E тест
+curl -X POST http://localhost:8081/synthesize \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Hello world.", "voice_id": "speaker_1"}'
+
+# Логи агентов
+docker logs reflex-app -f
+```

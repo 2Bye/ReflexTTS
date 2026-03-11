@@ -30,12 +30,30 @@ async def run_director(state: GraphState, vllm: VLLMClient) -> GraphState:
         Updated state with DirectorOutput in ssml_markup.
     """
     logger.info("director_start", text_length=len(state.text), voice=state.voice_id)
+    logger.info("director_input_text", text=state.text)
 
     director_output = await vllm.chat_json(
         system_prompt=DIRECTOR_SYSTEM_PROMPT,
         user_message=state.text,
         response_model=DirectorOutput,
     )
+
+    logger.info(
+        "director_llm_response",
+        segments=len(director_output.segments),
+        voice=director_output.voice_id,
+        language=director_output.language,
+        notes=director_output.notes,
+    )
+    for i, seg in enumerate(director_output.segments):
+        logger.info(
+            "director_segment",
+            index=i,
+            text=seg.text,
+            emotion=seg.emotion.value,
+            pause_before_ms=seg.pause_before_ms,
+            phoneme_hints=seg.phoneme_hints,
+        )
 
     # Override voice_id if user specified one
     if state.voice_id:
@@ -62,7 +80,7 @@ async def run_director(state: GraphState, vllm: VLLMClient) -> GraphState:
     logger.info(
         "director_done",
         segments=len(director_output.segments),
-        instruct=state.tts_instruct[:100],
+        instruct=state.tts_instruct[:200],
     )
     return state
 

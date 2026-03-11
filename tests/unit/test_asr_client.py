@@ -1,6 +1,6 @@
-"""Unit tests for the ASR client.
+"""Unit tests for the ASR client (HTTP microservice mode).
 
-Tests use mocks — no GPU or WhisperX installation needed.
+Tests use mocks — no WhisperX service or GPU needed.
 """
 
 from __future__ import annotations
@@ -21,6 +21,7 @@ from src.inference.asr_client import (
 def asr_config() -> WhisperXConfig:
     """Create a test ASR config."""
     return WhisperXConfig(
+        base_url="http://localhost:9999",
         model_name="tiny",
         device="cpu",
         compute_type="float32",
@@ -29,7 +30,7 @@ def asr_config() -> WhisperXConfig:
 
 @pytest.fixture
 def client(asr_config: WhisperXConfig) -> ASRClient:
-    """Create a test client (not loaded)."""
+    """Create a test client (not connected)."""
     return ASRClient(asr_config)
 
 
@@ -75,7 +76,7 @@ class TestTranscriptionResult:
 
 
 class TestASRClient:
-    """Test suite for ASRClient."""
+    """Test suite for ASRClient (HTTP mode)."""
 
     @pytest.mark.asyncio
     async def test_transcribe_raises_if_not_loaded(
@@ -88,24 +89,24 @@ class TestASRClient:
 
     @pytest.mark.asyncio
     async def test_health_check_not_loaded(self, client: ASRClient) -> None:
-        """health_check() returns False when not loaded."""
+        """health_check() returns False when not connected."""
+        client._base_url = "http://localhost:1"
         assert await client.health_check() is False
 
     @pytest.mark.asyncio
-    async def test_health_check_loaded(self, client: ASRClient) -> None:
-        """health_check() returns True when loaded."""
-        client._loaded = True
-        client._model = object()
-        assert await client.health_check() is True
+    async def test_health_check_no_url(self) -> None:
+        """health_check() returns False with empty base_url."""
+        config = WhisperXConfig(base_url="")
+        client = ASRClient(config)
+        assert await client.health_check() is False
 
     @pytest.mark.asyncio
     async def test_close_resets_state(self, client: ASRClient) -> None:
-        """close() releases model and resets state."""
+        """close() releases client and resets state."""
         client._loaded = True
-        client._model = object()
+        client._client = None
 
         await client.close()
 
         assert client._loaded is False
-        assert client._model is None
-        assert client._align_model is None
+        assert client._client is None

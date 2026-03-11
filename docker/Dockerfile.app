@@ -1,37 +1,34 @@
 # ──────────────────────────────────────────────
-# ReflexTTS Application Dockerfile
+# ReflexTTS App Dockerfile (lightweight)
 # ──────────────────────────────────────────────
-# Multi-stage build: dependencies → application
+# No CUDA needed — app only makes HTTP calls
+# to vLLM, CosyVoice, and WhisperX services.
 
-# ── Stage 1: Base with Python deps ───────────
 FROM python:3.12-slim AS base
 
 WORKDIR /app
 
-# System deps for audio processing
+# System deps
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg \
-    libsndfile1 \
-    curl \
-    git \
+    ffmpeg libsndfile1 curl git \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml ./
+COPY pyproject.toml README.md ./
 RUN pip install --no-cache-dir -e ".[dev]"
 
-# ── Stage 2: Application ────────────────────
+# ── Application ────────────────────
 FROM base AS app
 
 COPY src/ ./src/
-COPY configs/ ./configs/
 COPY tests/ ./tests/
+COPY scripts/ ./scripts/
 
-# Non-root user for security
+# Non-root user
 RUN useradd --create-home --shell /bin/bash appuser
 USER appuser
 
-EXPOSE 8080
+EXPOSE 8081
 
 CMD ["uvicorn", "src.api.app:create_app", "--factory", \
-     "--host", "0.0.0.0", "--port", "8080", \
+     "--host", "0.0.0.0", "--port", "8081", \
      "--log-level", "info"]

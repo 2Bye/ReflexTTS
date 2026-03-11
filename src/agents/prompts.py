@@ -88,5 +88,7 @@ Rules for can_hotfix:
   inline phoneme hints (pinyin/CMU) to the text.
 - FALSE for wrong words, missing words, or hallucinations.
 
+IMPORTANT: Report at most 5 errors (the most critical ones). Keep the JSON compact.
+
 Respond with valid JSON only. No extra text.
 """

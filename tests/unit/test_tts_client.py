@@ -1,6 +1,6 @@
-"""Unit tests for the TTS client.
+"""Unit tests for the TTS client (HTTP microservice mode).
 
-Tests use a mock CosyVoice3 model — no GPU needed.
+Tests use mocks — no CosyVoice service or GPU needed.
 """
 
 from __future__ import annotations
@@ -21,6 +21,7 @@ from src.inference.tts_client import (
 def tts_config() -> CosyVoiceConfig:
     """Create a test TTS config."""
     return CosyVoiceConfig(
+        base_url="http://localhost:9999",
         model_dir="test_models/cosyvoice",
         load_vllm=False,
         load_trt=False,
@@ -29,7 +30,7 @@ def tts_config() -> CosyVoiceConfig:
 
 @pytest.fixture
 def client(tts_config: CosyVoiceConfig) -> TTSClient:
-    """Create a test client (not loaded)."""
+    """Create a test client (not connected)."""
     return TTSClient(tts_config)
 
 
@@ -49,10 +50,10 @@ class TestAudioResult:
 
 
 class TestTTSClient:
-    """Test suite for TTSClient."""
+    """Test suite for TTSClient (HTTP mode)."""
 
     def test_not_loaded_raises(self, client: TTSClient) -> None:
-        """Operations fail if model not loaded."""
+        """Operations fail if service not connected."""
         assert client._loaded is False
 
     @pytest.mark.asyncio
@@ -69,7 +70,7 @@ class TestTTSClient:
     ) -> None:
         """clone_voice() raises TTSModelNotLoadedError."""
         with pytest.raises(TTSModelNotLoadedError):
-            await client.clone_voice("Hello", "/tmp/ref.wav", "ref text")  # noqa: S108
+            await client.clone_voice("Hello", b"\x00" * 44, "ref text")
 
     @pytest.mark.asyncio
     async def test_synthesize_unknown_voice_raises(
@@ -78,34 +79,36 @@ class TestTTSClient:
         """synthesize() with unknown voice_id raises TTSGenerationError."""
         # Force loaded state for this test
         client._loaded = True
-        client._model = object()
+        client._client = object()  # Mock HTTP client
 
         with pytest.raises(TTSGenerationError, match="Unknown voice_id"):
             await client.synthesize("Hello", voice_id="nonexistent_speaker")
 
     @pytest.mark.asyncio
     async def test_health_check_not_loaded(self, client: TTSClient) -> None:
-        """health_check() returns False when not loaded."""
+        """health_check() returns False when not connected."""
+        # Point to non-existent service
+        client._base_url = "http://localhost:1"
         assert await client.health_check() is False
 
     @pytest.mark.asyncio
-    async def test_health_check_loaded(self, client: TTSClient) -> None:
-        """health_check() returns True when loaded."""
-        client._loaded = True
-        client._model = object()
-        assert await client.health_check() is True
+    async def test_health_check_no_url(self) -> None:
+        """health_check() returns False with empty base_url."""
+        config = CosyVoiceConfig(base_url="")
+        client = TTSClient(config)
+        assert await client.health_check() is False
 
     @pytest.mark.asyncio
     async def test_close_resets_state(self, client: TTSClient) -> None:
-        """close() releases model and resets state."""
+        """close() releases client and resets state."""
         client._loaded = True
-        client._model = object()
+        client._client = None  # No real client to close
 
         await client.close()
 
         assert client._loaded is False
-        assert client._model is None
+        assert client._client is None
 
     def test_sample_rate_default(self, client: TTSClient) -> None:
-        """sample_rate returns config default when model not loaded."""
+        """sample_rate returns config default."""
         assert client.sample_rate == client.config.sample_rate
