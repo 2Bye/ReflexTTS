@@ -1,21 +1,24 @@
-"""Editor Agent — two-path audio correction.
+"""Editor Agent — segment-level audio correction.
 
 Path 1 (Fast): Pronunciation Hotfix
   → Director adds phoneme hints → Actor re-generates → Critic re-checks
   → Handled by graph routing (already in M2)
 
-Path 2 (Deep): Latent Inpainting via Flow Matching
+Path 2 (Deep): Segment Re-synthesis
+  → Re-synthesize entire failed segments via CosyVoice3 (clean TTS, no crossfade)
+  → Rebuild combined audio from per-segment WAV data
+
+Path 3 (Future): Latent Inpainting via Flow Matching
   → WhisperX alignment → mel masking → FM regeneration → vocoder → blend
-  → Falls back to chunk regeneration + cross-fade if FM unavailable
 
 Flow: Critic errors → Editor → repaired audio → Critic re-validation
 """
 
 from __future__ import annotations
 
+import numpy as np
+
 from src.agents.actor import _decode_wav_to_array, _encode_wav
-from src.audio.alignment import create_error_regions
-from src.audio.crossfade import crossfade_chunks
 from src.audio.metrics import convergence_score
 from src.inference.tts_client import TTSClient
 from src.log import get_logger
@@ -25,11 +28,11 @@ logger = get_logger(__name__)
 
 
 async def run_editor(state: GraphState, tts: TTSClient) -> GraphState:
-    """Execute the Editor Agent.
+    """Execute the Editor Agent with segment-level re-synthesis.
 
-    Attempts two correction strategies:
-    1. Latent inpainting (if CosyVoice3 FM module accessible)
-    2. Chunk regeneration + cross-fade (fallback)
+    New strategy (M11): instead of patching individual words via crossfade,
+    re-synthesize entire failed segments cleanly. This produces artifact-free
+    audio by replacing whole segment WAVs.
 
     Args:
         state: Current graph state with errors and audio.
@@ -58,20 +61,29 @@ async def run_editor(state: GraphState, tts: TTSClient) -> GraphState:
         iteration=state.iteration,
     )
 
-    # Try latent inpainting first, fall back to chunk regen
-    try:
-        repaired = await _inpaint_latent(state, tts)
-        state.agent_log.append(
-            {"agent": "editor", "action": "inpainted", "detail": "latent FM"}  # type: ignore[arg-type]
-        )
-    except Exception as e:
-        logger.warning("editor_inpaint_fallback", error=str(e))
-        repaired = await _regen_chunks(state, tts)
-        state.agent_log.append(
-            {"agent": "editor", "action": "chunk_regen", "detail": "crossfade fallback"}  # type: ignore[arg-type]
-        )
+    # Identify which segments failed
+    failed_segments = _get_failed_segments(state)
 
-    state.audio_bytes = repaired
+    if failed_segments and state.segment_audio:
+        # M11: Segment-level re-synthesis (clean, no crossfade)
+        await _regen_segments(state, tts, failed_segments)
+        state.agent_log.append(
+            {  # type: ignore[arg-type]
+                "agent": "editor",
+                "action": "segment_regen",
+                "detail": f"re-synthesized segments {failed_segments}",
+            }
+        )
+    else:
+        # Legacy fallback: no segment data available
+        logger.warning("editor_no_segment_data_fallback")
+        state.agent_log.append(
+            {  # type: ignore[arg-type]
+                "agent": "editor",
+                "action": "skip",
+                "detail": "no segment data for targeted regen",
+            }
+        )
 
     # Calculate convergence metric
     metrics = convergence_score(wer=state.wer)
@@ -81,122 +93,153 @@ async def run_editor(state: GraphState, tts: TTSClient) -> GraphState:
         "editor_done",
         convergence=f"{metrics.convergence_score:.3f}",
         converged=metrics.is_converged,
+        failed_segments=failed_segments,
     )
     return state
 
 
-async def _inpaint_latent(state: GraphState, tts: TTSClient) -> bytes:
-    """Attempt latent inpainting via CosyVoice3 Flow Matching.
-
-    Pipeline:
-    1. Convert error timestamps → mel regions
-    2. Build binary mask with cosine taper
-    3. Re-synthesize error text segments
-    4. Blend original + regenerated mel-spectrograms
-    5. Return repaired WAV
-
-    Note: This is the research frontier. When CosyVoice3's internal
-    FM module is not directly accessible, this falls through to the
-    chunk regeneration fallback.
-    """
-    # Decode original audio
-    original_wav = _decode_wav_to_array(state.audio_bytes)
-
-    if len(original_wav) == 0:
-        raise ValueError("Empty original audio")
-
-    # Step 1: Create mel regions from errors
-    error_dicts = [e.model_dump() for e in state.errors if not e.can_hotfix]
-    regions = create_error_regions(
-        error_dicts,
-        sample_rate=state.sample_rate,
-    )
-
-    if not regions:
-        raise ValueError("No valid error regions")
-
-    # Step 2-5: For now, we use the chunk regen approach as the
-    # CosyVoice3 FM module requires direct model access.
-    # When running on GPU, this will be replaced with:
-    #   mel_orig = extract_mel(original_wav, sample_rate)
-    #   mask = build_inpainting_mask(regions, mel_orig.shape[1])
-    #   tokens = tts._model.llm.generate(corrected_text)
-    #   mel_new = tts._model.flow_matching(tokens, mask=mask)
-    #   mel_blend = apply_mask_to_mel(mel_orig, mel_new, mask)
-    #   wav = tts._model.vocoder(mel_blend)
-
-    # For PoC: use chunk regen as the inpainting implementation
-    raise NotImplementedError(
-        "Latent FM inpainting requires direct CosyVoice3 model access. "
-        "Falling back to chunk regeneration."
-    )
-
-
-async def _regen_chunks(state: GraphState, tts: TTSClient) -> bytes:
-    """Fallback: regenerate error chunks and cross-fade into original.
-
-    For each error region:
-    1. Extract the expected text
-    2. Re-synthesize that text via CosyVoice3
-    3. Cross-fade the new audio into the original at the error position
-
-    Args:
-        state: Current graph state.
-        tts: TTS client.
+def _get_failed_segments(state: GraphState) -> list[int]:
+    """Identify which segments failed based on errors and segment_approved.
 
     Returns:
-        Repaired WAV bytes.
+        Sorted list of segment indices that need re-synthesis.
     """
-    original_wav = _decode_wav_to_array(state.audio_bytes)
+    failed: set[int] = set()
 
-    if len(original_wav) == 0:
-        return state.audio_bytes
+    # From segment_approved flags
+    for i, approved in enumerate(state.segment_approved):
+        if not approved:
+            failed.add(i)
 
-    result = original_wav.copy()
-    sr = state.sample_rate
+    # From error segment_index
+    for err in state.errors:
+        if not err.can_hotfix and err.segment_index >= 0:
+            failed.add(err.segment_index)
 
-    for error in state.errors:
-        if error.can_hotfix:
+    return sorted(failed)
+
+
+async def _regen_segments(
+    state: GraphState,
+    tts: TTSClient,
+    failed_segments: list[int],
+) -> None:
+    """Re-synthesize entire failed segments and rebuild combined audio.
+
+    Unlike the old crossfade approach, this produces clean full-segment
+    audio with no splicing artifacts.
+
+    Args:
+        state: Current graph state (modified in-place).
+        tts: CosyVoice3 TTS client.
+        failed_segments: Indices of segments to re-synthesize.
+    """
+    # Get Director segments for text
+    segments: list[dict[str, object]] = []
+    voice_id = "speaker_1"
+    if state.ssml_markup:
+        if "segments" in state.ssml_markup:
+            segments = state.ssml_markup["segments"]
+        if "voice_id" in state.ssml_markup:
+            voice_id = str(state.ssml_markup["voice_id"]) or voice_id
+
+
+    for seg_idx in failed_segments:
+        if seg_idx >= len(segments):
+            logger.warning(
+                "editor_segment_out_of_range",
+                segment_index=seg_idx,
+                total_segments=len(segments),
+            )
             continue
 
-        # Convert ms → samples
-        start_sample = int(error.start_ms * sr / 1000)
-        end_sample = int(error.end_ms * sr / 1000)
+        seg = segments[seg_idx]
+        seg_text = str(seg.get("text", ""))
 
-        if start_sample >= end_sample or start_sample >= len(result):
+        if not seg_text:
             continue
 
-        end_sample = min(end_sample, len(result))
+        # Build instruct from emotion
+        instruct = ""
+        emotion = str(seg.get("emotion", "neutral"))
+        if emotion != "neutral":
+            instruct = f"Speak with {emotion} tone and feeling."
 
-        # Re-synthesize the correct word(s)
-        voice_id = "speaker_1"
-        if state.ssml_markup and "voice_id" in state.ssml_markup:
-            voice_id = state.ssml_markup["voice_id"]
+        logger.info(
+            "editor_regen_segment",
+            segment_index=seg_idx,
+            text=seg_text[:80],
+            emotion=emotion,
+        )
 
         try:
-            regen_result = await tts.synthesize(
-                text=error.word_expected,
+            result = await tts.synthesize(
+                text=seg_text,
                 voice_id=voice_id,
+                instruct=instruct,
             )
 
-            result = crossfade_chunks(
-                original=result,
-                replacement=regen_result.waveform,
-                start_sample=start_sample,
-                end_sample=end_sample,
+            # Replace segment audio
+            state.segment_audio[seg_idx] = _encode_wav(
+                result.waveform, result.sample_rate
             )
+            # Reset approval — Critic will re-evaluate
+            state.segment_approved[seg_idx] = False
 
-            logger.debug(
-                "editor_chunk_replaced",
-                word=error.word_expected,
-                start_ms=error.start_ms,
-                end_ms=error.end_ms,
+            logger.info(
+                "editor_segment_done",
+                segment_index=seg_idx,
+                duration_s=f"{result.duration_seconds:.2f}",
+                samples=len(result.waveform),
             )
         except Exception as e:
             logger.warning(
-                "editor_chunk_regen_failed",
-                word=error.word_expected,
+                "editor_segment_regen_failed",
+                segment_index=seg_idx,
                 error=str(e),
             )
 
-    return _encode_wav(result, sr)
+    # Rebuild combined audio from all segments (approved + re-synthesized)
+    _rebuild_combined_audio(state, segments)
+
+
+def _rebuild_combined_audio(
+    state: GraphState,
+    segments: list[dict[str, object]],
+) -> None:
+    """Rebuild the combined audio from per-segment WAV data.
+
+    Concatenates all segment audio (with pauses) into the final audio_bytes.
+
+    Args:
+        state: Current graph state (modified in-place).
+        segments: Director segments (for pause info).
+    """
+    sr = state.sample_rate
+    waveforms: list[np.ndarray] = []
+
+    for i, seg in enumerate(segments):
+        # Insert pause before segment
+        pause_val = seg.get("pause_before_ms", 0)
+        pause_ms = int(float(str(pause_val))) if pause_val else 0
+        if pause_ms > 0:
+            pause_samples = int(sr * pause_ms / 1000)
+            waveforms.append(np.zeros(pause_samples, dtype=np.float32))
+
+        # Decode segment audio
+        if i < len(state.segment_audio) and state.segment_audio[i]:
+            seg_wav = _decode_wav_to_array(state.segment_audio[i])
+            if len(seg_wav) > 0:
+                waveforms.append(seg_wav)
+
+    if waveforms:
+        combined = np.concatenate(waveforms)
+        state.audio_bytes = _encode_wav(combined, sr)
+    else:
+        logger.warning("editor_rebuild_empty")
+
+    logger.info(
+        "editor_rebuild_done",
+        segments=len(segments),
+        total_samples=sum(len(w) for w in waveforms),
+    )
