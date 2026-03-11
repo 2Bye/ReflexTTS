@@ -8,6 +8,7 @@ Flow: DirectorOutput → Actor (CosyVoice3) → audio_bytes
 
 from __future__ import annotations
 
+import asyncio
 import struct
 from io import BytesIO
 
@@ -21,16 +22,21 @@ from src.orchestrator.state import GraphState
 logger = get_logger(__name__)
 
 
-async def run_actor(state: GraphState, tts: TTSClient) -> GraphState:
-    """Execute the Actor Agent.
+async def run_actor(
+    state: GraphState,
+    tts: TTSClient,
+    max_concurrency: int = 4,
+) -> GraphState:
+    """Execute the Actor Agent with parallel segment synthesis.
 
-    Synthesizes speech from Director's segments and produces audio.
+    Synthesizes speech segments in parallel via asyncio.gather().
     On retry iterations, only re-synthesizes unapproved segments,
     reusing cached audio for segments that passed Critic evaluation.
 
     Args:
         state: Current graph state with DirectorOutput in ssml_markup.
         tts: CosyVoice3 TTS client.
+        max_concurrency: Max concurrent TTS requests (GPU semaphore).
 
     Returns:
         Updated state with audio_bytes and segment_audio.
@@ -44,6 +50,7 @@ async def run_actor(state: GraphState, tts: TTSClient) -> GraphState:
         segments=num_segments,
         voice=voice_id,
         iteration=state.iteration,
+        max_concurrency=max_concurrency,
     )
 
     # Initialize segment_audio list if needed
@@ -51,81 +58,97 @@ async def run_actor(state: GraphState, tts: TTSClient) -> GraphState:
         state.segment_audio = [b""] * num_segments
         state.segment_approved = [False] * num_segments
 
-    waveforms: list[np.ndarray] = []
     sample_rate = tts.sample_rate
+    semaphore = asyncio.Semaphore(max_concurrency)
 
-    for i, segment in enumerate(director_output.segments):
-        # Skip re-synthesis for already-approved segments
-        if state.segment_approved[i] and state.segment_audio[i]:
-            logger.info(
-                "actor_segment_cached",
-                segment_index=i,
-                text=segment.text[:50],
-            )
-            seg_wav = _decode_wav_to_array(state.segment_audio[i])
-            waveforms.append(seg_wav)
-            continue
-
-        # Insert pause before segment
-        if segment.pause_before_ms > 0:
-            pause_samples = int(sample_rate * segment.pause_before_ms / 1000)
-            waveforms.append(np.zeros(pause_samples, dtype=np.float32))
-
-        # Build text with phoneme hints inline
+    # Build list of synthesis tasks (None = use cached)
+    async def _synth_segment(idx: int, segment: Segment) -> tuple[int, np.ndarray]:
+        """Synthesize a single segment under semaphore control."""
         text = _build_text_with_hints(segment)
-
-        # Build instruct from emotion
         instruct = ""
         if segment.emotion.value != "neutral":
             instruct = f"Speak with {segment.emotion.value} tone and feeling."
 
         logger.info(
             "actor_segment_start",
-            segment_index=i,
+            segment_index=idx,
             text=text,
             emotion=segment.emotion.value,
-            instruct=instruct,
         )
 
-        # Synthesize this segment
-        result = await tts.synthesize(
-            text=text,
-            voice_id=voice_id,
-            instruct=instruct,
-        )
-
-        waveforms.append(result.waveform)
-        sample_rate = result.sample_rate
+        async with semaphore:
+            result = await tts.synthesize(
+                text=text,
+                voice_id=voice_id,
+                instruct=instruct,
+            )
 
         # Store per-segment audio
-        state.segment_audio[i] = _encode_wav(result.waveform, sample_rate)
+        state.segment_audio[idx] = _encode_wav(result.waveform, result.sample_rate)
 
         logger.info(
             "actor_segment_done",
-            segment_index=i,
+            segment_index=idx,
             duration_s=f"{result.duration_seconds:.2f}",
             waveform_samples=len(result.waveform),
-            sample_rate=result.sample_rate,
         )
+        return idx, result.waveform
+
+    # Collect tasks for unapproved segments
+    tasks: list[asyncio.Task[tuple[int, np.ndarray]]] = []
+    cached_indices: set[int] = set()
+
+    for i, segment in enumerate(director_output.segments):
+        if state.segment_approved[i] and state.segment_audio[i]:
+            cached_indices.add(i)
+            logger.info(
+                "actor_segment_cached",
+                segment_index=i,
+                text=segment.text[:50],
+            )
+        else:
+            tasks.append(asyncio.create_task(_synth_segment(i, segment)))
+
+    # Run all synthesis tasks in parallel
+    synth_results: dict[int, np.ndarray] = {}
+    if tasks:
+        completed = await asyncio.gather(*tasks)
+        for idx, waveform in completed:
+            synth_results[idx] = waveform
+
+    # Reassemble in order: cached audio + newly synthesized + pauses
+    waveforms: list[np.ndarray] = []
+    for i, segment in enumerate(director_output.segments):
+        # Insert pause before segment
+        if segment.pause_before_ms > 0:
+            pause_samples = int(sample_rate * segment.pause_before_ms / 1000)
+            waveforms.append(np.zeros(pause_samples, dtype=np.float32))
+
+        if i in cached_indices:
+            seg_wav = _decode_wav_to_array(state.segment_audio[i])
+            waveforms.append(seg_wav)
+        elif i in synth_results:
+            waveforms.append(synth_results[i])
 
     # Concatenate all segments
     combined = np.concatenate(waveforms) if waveforms else np.array([], dtype=np.float32)
-
-    # Encode to WAV bytes
     wav_bytes = _encode_wav(combined, sample_rate)
 
     state.audio_bytes = wav_bytes
     state.sample_rate = sample_rate
 
-    # Count how many segments were re-synthesized vs cached
-    cached_count = sum(1 for a in state.segment_approved if a)
-    synth_count = num_segments - cached_count
+    cached_count = len(cached_indices)
+    synth_count = len(synth_results)
 
     state.agent_log.append(
         {  # type: ignore[arg-type]
             "agent": "actor",
             "action": "synthesized",
-            "detail": f"{len(combined) / sample_rate:.2f}s audio ({synth_count} new, {cached_count} cached)",
+            "detail": (
+                f"{len(combined) / sample_rate:.2f}s audio "
+                f"({synth_count} new, {cached_count} cached, "
+                f"parallel={max_concurrency})"
+            ),
         }
     )
 
