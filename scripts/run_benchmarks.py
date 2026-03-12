@@ -37,6 +37,7 @@ class BenchmarkResult:
     language: str
     category: str
     difficulty: str
+    duration_category: str = "medium"
     status: str = "pending"
     wer: float | None = None
     iterations: int = 0
@@ -76,6 +77,7 @@ def load_texts(
     path: Path = BENCHMARK_TEXTS,
     category: str | None = None,
     language: str | None = None,
+    duration: str | None = None,
 ) -> list[dict[str, object]]:
     """Load benchmark texts, optionally filtered."""
     with open(path) as f:
@@ -87,6 +89,11 @@ def load_texts(
         texts = [
             t for t in texts
             if str(t.get("language", "")).startswith(language)
+        ]
+    if duration:
+        texts = [
+            t for t in texts
+            if t.get("duration_category") == duration
         ]
     return texts
 
@@ -104,6 +111,7 @@ async def run_single(
         language=str(text_item.get("language", "auto")),
         category=str(text_item.get("category", "unknown")),
         difficulty=str(text_item.get("difficulty", "unknown")),
+        duration_category=str(text_item.get("duration_category", "medium")),
     )
 
     start_time = time.monotonic()
@@ -259,13 +267,19 @@ def print_report(
         )
 
     lines.append("\n## Individual Results\n")
-    lines.append("| ID | Lang | Category | Status | WER | Loops | Latency |")
-    lines.append("|-----|------|----------|--------|-----|-------|---------|")
+    lines.append(
+        "| ID | Lang | Category | Duration | Status | WER "
+        "| Loops | Latency |"
+    )
+    lines.append(
+        "|-----|------|----------|----------|--------|-----"
+        "|-------|---------|")
 
     for r in results:
         wer_str = f"{r.wer:.3f}" if r.wer is not None else "—"
         lines.append(
             f"| {r.text_id} | {r.language} | {r.category} | "
+            f"{r.duration_category} | "
             f"{r.status} | {wer_str} | {r.iterations} | "
             f"{r.latency_seconds:.1f}s |"
         )
@@ -279,6 +293,7 @@ async def main(args: argparse.Namespace) -> None:
     texts = load_texts(
         category=args.category,
         language=args.language,
+        duration=args.duration,
     )
 
     print(f"Loaded {len(texts)} benchmark texts")
@@ -357,6 +372,12 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--language", default=None, help="Filter by language"
+    )
+    parser.add_argument(
+        "--duration",
+        default=None,
+        choices=["short", "medium", "long"],
+        help="Filter by duration category",
     )
     parser.add_argument(
         "--output",

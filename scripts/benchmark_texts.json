@@ -1,219 +1,81 @@
 [
   {
-    "id": "ru_simple_01",
-    "text": "Добрый день! Меня зовут Алексей.",
-    "language": "ru",
-    "category": "simple",
-    "difficulty": "easy",
-    "expected_issues": []
-  },
-  {
-    "id": "ru_simple_02",
-    "text": "Завтра ожидается прекрасная погода. Температура поднимется до двадцати пяти градусов.",
-    "language": "ru",
-    "category": "simple",
-    "difficulty": "easy",
-    "expected_issues": []
-  },
-  {
-    "id": "ru_simple_03",
-    "text": "Спасибо за обращение. Ваш запрос будет обработан в течение трёх рабочих дней.",
-    "language": "ru",
-    "category": "simple",
-    "difficulty": "easy",
-    "expected_issues": []
-  },
-  {
-    "id": "ru_dialog_01",
-    "text": "Здравствуйте, как я могу вам помочь? У меня вопрос по доставке заказа.",
-    "language": "ru",
-    "category": "dialog",
-    "difficulty": "easy",
-    "expected_issues": ["intonation_shift"]
-  },
-  {
-    "id": "ru_dialog_02",
-    "text": "Да, конечно! Подождите, пожалуйста. Сейчас проверю информацию по вашему номеру.",
-    "language": "ru",
-    "category": "dialog",
-    "difficulty": "easy",
-    "expected_issues": []
-  },
-  {
-    "id": "ru_dialog_03",
-    "text": "Нет, к сожалению, это невозможно. Но я могу предложить альтернативный вариант.",
-    "language": "ru",
-    "category": "dialog",
-    "difficulty": "medium",
-    "expected_issues": ["negation_tone"]
-  },
-  {
-    "id": "ru_names_01",
-    "text": "Встречу проведёт Анастасия Владимировна Петрова-Сидоренко.",
-    "language": "ru",
-    "category": "names",
-    "difficulty": "medium",
-    "expected_issues": ["compound_surname"]
-  },
-  {
-    "id": "ru_names_02",
-    "text": "Следующий доклад представит профессор Константин Эдуардович Циолковский.",
-    "language": "ru",
-    "category": "names",
-    "difficulty": "medium",
-    "expected_issues": ["patronymic"]
-  },
-  {
-    "id": "ru_names_03",
-    "text": "Генеральный директор компании Роснефть Игорь Иванович Сечин подтвердил участие.",
-    "language": "ru",
-    "category": "names",
-    "difficulty": "hard",
-    "expected_issues": ["proper_noun", "company_name"]
-  },
-  {
-    "id": "ru_abbreviations_01",
-    "text": "По данным МВД РФ, уровень ДТП снизился на 15% по сравнению с прошлым годом.",
-    "language": "ru",
-    "category": "abbreviations",
-    "difficulty": "medium",
-    "expected_issues": ["abbreviation_expansion"]
-  },
-  {
-    "id": "ru_abbreviations_02",
-    "text": "Согласно ФЗ №152 о персональных данных, ООО «Техносервис» обязано уведомить ФСТЭК.",
-    "language": "ru",
-    "category": "abbreviations",
-    "difficulty": "hard",
-    "expected_issues": ["abbreviation_expansion", "legal_terms"]
-  },
-  {
-    "id": "ru_abbreviations_03",
-    "text": "ВВП страны вырос на 3,2% в I квартале 2025 г.",
-    "language": "ru",
-    "category": "abbreviations",
-    "difficulty": "hard",
-    "expected_issues": ["roman_numeral", "abbreviation_expansion"]
-  },
-  {
-    "id": "ru_numbers_01",
-    "text": "Стоимость проекта составляет 1 234 567 рублей и 89 копеек.",
-    "language": "ru",
-    "category": "numbers",
-    "difficulty": "medium",
-    "expected_issues": ["large_number"]
-  },
-  {
-    "id": "ru_numbers_02",
-    "text": "Позвоните по номеру +7 (495) 123-45-67 в рабочие часы с 9:00 до 18:30.",
-    "language": "ru",
-    "category": "numbers",
-    "difficulty": "hard",
-    "expected_issues": ["phone_number", "time"]
-  },
-  {
-    "id": "ru_numbers_03",
-    "text": "Дата рождения: 17 марта 1987 года. Паспорт серия 45 12, номер 345678.",
-    "language": "ru",
-    "category": "numbers",
-    "difficulty": "hard",
-    "expected_issues": ["date", "document_number"]
-  },
-  {
-    "id": "ru_homographs_01",
-    "text": "Старинный замок стоял на холме, а замок на двери был сломан.",
-    "language": "ru",
-    "category": "homographs",
-    "difficulty": "hard",
-    "expected_issues": ["stress_ambiguity"]
-  },
-  {
-    "id": "ru_homographs_02",
-    "text": "Мука просеивается через сито, а мука ожидания невыносима.",
-    "language": "ru",
-    "category": "homographs",
-    "difficulty": "hard",
-    "expected_issues": ["stress_ambiguity"]
-  },
-  {
-    "id": "ru_homographs_03",
-    "text": "Она уже села в кресло, а деревня, где мы живём, — это село.",
-    "language": "ru",
-    "category": "homographs",
-    "difficulty": "hard",
-    "expected_issues": ["stress_ambiguity"]
-  },
-  {
-    "id": "ru_emotion_01",
-    "text": "Ура! Мы выиграли! Это невероятно! Я так счастлив!",
-    "language": "ru",
-    "category": "emotion",
-    "difficulty": "medium",
-    "expected_issues": ["exclamation_prosody"]
-  },
-  {
-    "id": "ru_emotion_02",
-    "text": "Мне очень жаль. Примите мои искренние соболезнования.",
-    "language": "ru",
-    "category": "emotion",
-    "difficulty": "medium",
-    "expected_issues": ["sadness_tone"]
-  },
-  {
-    "id": "ru_emotion_03",
-    "text": "Это совершенно неприемлемо! Как вы могли допустить такую ошибку?",
-    "language": "ru",
-    "category": "emotion",
-    "difficulty": "medium",
-    "expected_issues": ["anger_tone"]
-  },
-  {
-    "id": "ru_long_01",
-    "text": "Уважаемые коллеги, сегодня я хочу представить вам результаты квартального отчёта нашей компании. За последние три месяца мы достигли значительных результатов в области продаж, увеличив общий оборот на двадцать три процента по сравнению с аналогичным периодом прошлого года. Отдел маркетинга провёл масштабную рекламную кампанию, которая привлекла более пятнадцати тысяч новых клиентов.",
-    "language": "ru",
-    "category": "long",
-    "difficulty": "hard",
-    "expected_issues": ["long_text", "consistency"]
-  },
-  {
-    "id": "ru_long_02",
-    "text": "В связи с обновлением политики конфиденциальности, просим вас ознакомиться с новыми условиями обработки персональных данных. Все изменения вступают в силу с первого января следующего года. В случае несогласия с новыми условиями, вы можете направить письменный отказ на адрес нашего юридического департамента.",
-    "language": "ru",
-    "category": "long",
-    "difficulty": "hard",
-    "expected_issues": ["formal_register", "long_text"]
-  },
-  {
-    "id": "ru_technical_01",
-    "text": "Для настройки сервера установите Nginx версии 1.25 и откройте порт 443 для HTTPS.",
-    "language": "ru",
-    "category": "technical",
-    "difficulty": "hard",
-    "expected_issues": ["technical_terms", "version_number"]
-  },
-  {
-    "id": "ru_technical_02",
-    "text": "Используйте API endpoint /v2/users для получения JSON-ответа с кодом 200.",
-    "language": "ru",
-    "category": "technical",
-    "difficulty": "hard",
-    "expected_issues": ["technical_terms", "mixed_lang"]
-  },
-  {
     "id": "en_simple_01",
-    "text": "Good morning! Welcome to our presentation today.",
+    "text": "Hello there!",
     "language": "en",
     "category": "simple",
     "difficulty": "easy",
+    "duration_category": "short",
     "expected_issues": []
   },
   {
     "id": "en_simple_02",
+    "text": "Good morning! Welcome to our presentation today.",
+    "language": "en",
+    "category": "simple",
+    "difficulty": "easy",
+    "duration_category": "short",
+    "expected_issues": []
+  },
+  {
+    "id": "en_simple_03",
     "text": "The weather forecast predicts sunny skies with temperatures around seventy-five degrees.",
     "language": "en",
     "category": "simple",
     "difficulty": "easy",
+    "duration_category": "medium",
     "expected_issues": []
+  },
+  {
+    "id": "en_simple_04",
+    "text": "Please take a seat.",
+    "language": "en",
+    "category": "simple",
+    "difficulty": "easy",
+    "duration_category": "short",
+    "expected_issues": []
+  },
+  {
+    "id": "en_simple_05",
+    "text": "Thank you for calling. Your inquiry has been recorded and our team will respond within two business days.",
+    "language": "en",
+    "category": "simple",
+    "difficulty": "easy",
+    "duration_category": "medium",
+    "expected_issues": []
+  },
+  {
+    "id": "en_dialog_01",
+    "text": "Hi, how can I help you today? I would like to return this item, please.",
+    "language": "en",
+    "category": "dialog",
+    "difficulty": "easy",
+    "duration_category": "medium",
+    "expected_issues": [
+      "intonation_shift"
+    ]
+  },
+  {
+    "id": "en_dialog_02",
+    "text": "Excuse me, could you repeat that? I didn't quite catch what you said. Sure, no problem at all.",
+    "language": "en",
+    "category": "dialog",
+    "difficulty": "easy",
+    "duration_category": "medium",
+    "expected_issues": [
+      "question_intonation"
+    ]
+  },
+  {
+    "id": "en_dialog_03",
+    "text": "I'm afraid that won't be possible. However, I can offer you an alternative solution that might work for your situation.",
+    "language": "en",
+    "category": "dialog",
+    "difficulty": "medium",
+    "duration_category": "medium",
+    "expected_issues": [
+      "negation_tone"
+    ]
   },
   {
     "id": "en_names_01",
@@ -221,15 +83,69 @@
     "language": "en",
     "category": "names",
     "difficulty": "medium",
-    "expected_issues": ["foreign_surname"]
+    "duration_category": "medium",
+    "expected_issues": [
+      "foreign_surname"
+    ]
   },
   {
-    "id": "en_technical_01",
-    "text": "Configure the PostgreSQL database with SSL/TLS encryption on port 5432.",
+    "id": "en_names_02",
+    "text": "The award was accepted by Professor Mikhail Tchaikovsky on behalf of the university.",
     "language": "en",
-    "category": "technical",
+    "category": "names",
+    "difficulty": "medium",
+    "duration_category": "medium",
+    "expected_issues": [
+      "foreign_surname",
+      "slavic_name"
+    ]
+  },
+  {
+    "id": "en_names_03",
+    "text": "CEO Satya Nadella and CFO Amy Hood presented Microsoft's quarterly earnings to shareholders on Tuesday.",
+    "language": "en",
+    "category": "names",
     "difficulty": "hard",
-    "expected_issues": ["technical_terms"]
+    "duration_category": "medium",
+    "expected_issues": [
+      "proper_noun",
+      "company_name",
+      "indian_name"
+    ]
+  },
+  {
+    "id": "en_abbreviations_01",
+    "text": "The FBI and CIA released a joint statement regarding NATO's cybersecurity framework.",
+    "language": "en",
+    "category": "abbreviations",
+    "difficulty": "medium",
+    "duration_category": "medium",
+    "expected_issues": [
+      "abbreviation_expansion"
+    ]
+  },
+  {
+    "id": "en_abbreviations_02",
+    "text": "Per the FDA's Q3 report, the USDA and EPA jointly approved the new GMO guidelines under CFR Title 21.",
+    "language": "en",
+    "category": "abbreviations",
+    "difficulty": "hard",
+    "duration_category": "medium",
+    "expected_issues": [
+      "abbreviation_expansion",
+      "regulatory_terms"
+    ]
+  },
+  {
+    "id": "en_abbreviations_03",
+    "text": "ASAP.",
+    "language": "en",
+    "category": "abbreviations",
+    "difficulty": "easy",
+    "duration_category": "short",
+    "expected_issues": [
+      "abbreviation_expansion"
+    ]
   },
   {
     "id": "en_numbers_01",
@@ -237,166 +153,381 @@
     "language": "en",
     "category": "numbers",
     "difficulty": "hard",
-    "expected_issues": ["currency", "percentage"]
+    "duration_category": "medium",
+    "expected_issues": [
+      "currency",
+      "percentage"
+    ]
   },
   {
-    "id": "zh_simple_01",
-    "text": "大家好，欢迎来到今天的会议。",
-    "language": "zh",
-    "category": "simple",
-    "difficulty": "easy",
-    "expected_issues": []
+    "id": "en_numbers_02",
+    "text": "Call us at +1 (800) 555-0199 between 9 AM and 5 PM Eastern Standard Time.",
+    "language": "en",
+    "category": "numbers",
+    "difficulty": "hard",
+    "duration_category": "medium",
+    "expected_issues": [
+      "phone_number",
+      "time"
+    ]
   },
   {
-    "id": "zh_simple_02",
-    "text": "明天的天气预报显示，气温将达到三十度。",
-    "language": "zh",
-    "category": "simple",
-    "difficulty": "easy",
-    "expected_issues": []
+    "id": "en_numbers_03",
+    "text": "The population of Tokyo is approximately 13,960,000 people as of the 2024 census, making it the largest metropolitan area in the world.",
+    "language": "en",
+    "category": "numbers",
+    "difficulty": "hard",
+    "duration_category": "medium",
+    "expected_issues": [
+      "large_number",
+      "date"
+    ]
   },
   {
-    "id": "zh_names_01",
-    "text": "清华大学校长邱勇教授将出席本次论坛。",
-    "language": "zh",
-    "category": "names",
-    "difficulty": "medium",
-    "expected_issues": ["proper_noun"]
-  },
-  {
-    "id": "zh_homophone_01",
-    "text": "银行的行长正在行走。",
-    "language": "zh",
+    "id": "en_homographs_01",
+    "text": "The bass player caught a bass while fishing near the desert. He didn't desert his friends though.",
+    "language": "en",
     "category": "homographs",
     "difficulty": "hard",
-    "expected_issues": ["polyphone"]
+    "duration_category": "medium",
+    "expected_issues": [
+      "pronunciation_ambiguity"
+    ]
   },
   {
-    "id": "zh_numbers_01",
-    "text": "公司2024年营收达到了1.5亿元人民币。",
-    "language": "zh",
-    "category": "numbers",
+    "id": "en_homographs_02",
+    "text": "I read that you should read more books. The lead actor took the lead in the race.",
+    "language": "en",
+    "category": "homographs",
+    "difficulty": "hard",
+    "duration_category": "medium",
+    "expected_issues": [
+      "pronunciation_ambiguity"
+    ]
+  },
+  {
+    "id": "en_homographs_03",
+    "text": "They had to close the window close to the entrance because the wind was too strong to wind the clock.",
+    "language": "en",
+    "category": "homographs",
+    "difficulty": "hard",
+    "duration_category": "medium",
+    "expected_issues": [
+      "pronunciation_ambiguity"
+    ]
+  },
+  {
+    "id": "en_emotion_01",
+    "text": "Oh my God, this is amazing! I can't believe we actually did it! This is the best day ever!",
+    "language": "en",
+    "category": "emotion",
     "difficulty": "medium",
-    "expected_issues": ["large_number"]
+    "duration_category": "medium",
+    "expected_issues": [
+      "exclamation_prosody"
+    ]
   },
   {
-    "id": "mixed_ruen_01",
-    "text": "Для авторизации используйте ваш Google Account и нажмите кнопку Sign In.",
-    "language": "mixed_ru_en",
-    "category": "mixed_language",
+    "id": "en_emotion_02",
+    "text": "I'm deeply sorry for your loss. Please accept my heartfelt condolences during this difficult time.",
+    "language": "en",
+    "category": "emotion",
+    "difficulty": "medium",
+    "duration_category": "medium",
+    "expected_issues": [
+      "sadness_tone"
+    ]
+  },
+  {
+    "id": "en_emotion_03",
+    "text": "This is absolutely unacceptable! I've been waiting for three hours and nobody has bothered to help me!",
+    "language": "en",
+    "category": "emotion",
+    "difficulty": "medium",
+    "duration_category": "medium",
+    "expected_issues": [
+      "anger_tone"
+    ]
+  },
+  {
+    "id": "en_emotion_04",
+    "text": "Wow!",
+    "language": "en",
+    "category": "emotion",
+    "difficulty": "easy",
+    "duration_category": "short",
+    "expected_issues": [
+      "exclamation_prosody"
+    ]
+  },
+  {
+    "id": "en_technical_01",
+    "text": "Configure the PostgreSQL database with SSL/TLS encryption on port 5432.",
+    "language": "en",
+    "category": "technical",
     "difficulty": "hard",
-    "expected_issues": ["code_switching"]
+    "duration_category": "medium",
+    "expected_issues": [
+      "technical_terms"
+    ]
   },
   {
-    "id": "mixed_ruen_02",
-    "text": "Обновление firmware версии 3.2.1 доступно на странице Download Center.",
-    "language": "mixed_ru_en",
-    "category": "mixed_language",
+    "id": "en_technical_02",
+    "text": "Deploy the Kubernetes cluster using Helm charts, then configure the Nginx ingress controller with Let's Encrypt certificates for automatic HTTPS renewal.",
+    "language": "en",
+    "category": "technical",
     "difficulty": "hard",
-    "expected_issues": ["code_switching", "technical_terms"]
+    "duration_category": "medium",
+    "expected_issues": [
+      "technical_terms",
+      "proper_noun"
+    ]
   },
   {
-    "id": "mixed_ruzh_01",
-    "text": "Китайская компания 华为 представила новый смартфон на выставке в Москве.",
-    "language": "mixed_ru_zh",
-    "category": "mixed_language",
+    "id": "en_technical_03",
+    "text": "Run pip install dash equals two point zero, then execute python app dot py to start the server on localhost colon eight zero five zero.",
+    "language": "en",
+    "category": "technical",
+    "difficulty": "medium",
+    "duration_category": "medium",
+    "expected_issues": [
+      "technical_terms",
+      "spelled_out_code"
+    ]
+  },
+  {
+    "id": "en_long_01",
+    "text": "Good afternoon, everyone. Thank you for joining today's quarterly earnings call. I'm pleased to report that our company achieved record-breaking results this quarter, with total revenue reaching four hundred and twenty-seven million dollars, representing a twenty-three percent increase compared to the same period last year. Our cloud services division was the primary growth driver, contributing over sixty percent of the total revenue. Customer acquisition costs decreased by fifteen percent thanks to improved marketing efficiency, while customer retention rates improved to ninety-four percent. We also expanded our operations into three new international markets: Brazil, India, and Indonesia. Looking ahead, we expect continued momentum in the second half of the fiscal year, driven by the launch of our next-generation platform and strategic partnerships with leading enterprise clients. Our research and development team has been working tirelessly on innovative features that we believe will significantly differentiate us from our competitors. We remain committed to delivering exceptional value to our shareholders and customers alike.",
+    "language": "en",
+    "category": "long",
     "difficulty": "hard",
-    "expected_issues": ["code_switching", "chinese_in_russian"]
+    "duration_category": "long",
+    "expected_issues": [
+      "long_text",
+      "consistency",
+      "formal_register"
+    ]
   },
   {
-    "id": "edge_punctuation_01",
-    "text": "Что? Правда?! Вы уверены... Хм, интересно.",
-    "language": "ru",
+    "id": "en_long_02",
+    "text": "The history of artificial intelligence is a fascinating journey that spans over seven decades. It all began in the summer of nineteen fifty-six, when a group of researchers gathered at Dartmouth College to explore the idea that every aspect of learning could, in principle, be so precisely described that a machine could simulate it. John McCarthy, Marvin Minsky, Nathaniel Rochester, and Claude Shannon organized this seminal workshop, which is widely considered the birth of AI as a field of study. In the decades that followed, AI went through cycles of tremendous optimism and crushing disappointment, periods known as AI summers and AI winters. Early symbolic AI systems showed promise in narrow domains but failed to deliver on broader expectations. The expert systems boom of the nineteen eighties gave way to another winter when the limitations of rule-based approaches became apparent. It wasn't until the twenty-tens that deep learning, powered by massive datasets and GPU computing, transformed the landscape entirely. Models like AlexNet, GPT, and DALL-E demonstrated capabilities that previous generations of researchers could only dream of. Today, we stand at a crossroads where AI has become deeply embedded in our daily lives, from voice assistants to medical diagnostics, and the decisions we make now about governance, ethics, and deployment will shape the trajectory of this technology for generations to come.",
+    "language": "en",
+    "category": "long",
+    "difficulty": "hard",
+    "duration_category": "long",
+    "expected_issues": [
+      "long_text",
+      "consistency",
+      "proper_nouns",
+      "historical_dates"
+    ]
+  },
+  {
+    "id": "en_long_03",
+    "text": "Climate change represents one of the most pressing challenges facing humanity in the twenty-first century. The Intergovernmental Panel on Climate Change has warned that global temperatures could rise by more than one point five degrees Celsius above pre-industrial levels within the next decade, triggering irreversible changes to ecosystems worldwide. Rising sea levels threaten coastal communities from Miami to Mumbai, while increasingly severe weather events — hurricanes, droughts, and wildfires — are causing billions of dollars in damage annually. The transition to renewable energy sources, including solar, wind, and hydrogen, offers a pathway to reducing greenhouse gas emissions. Many countries have pledged to achieve net-zero emissions by twenty fifty, but the gap between ambition and action remains significant. Carbon capture technologies, reforestation efforts, and changes in agricultural practices are all part of the solution, yet they require unprecedented levels of international cooperation and investment. The youth climate movement, inspired by activists like Greta Thunberg, has brought renewed urgency to the debate, demanding that world leaders take bold and immediate action to protect the planet for future generations.",
+    "language": "en",
+    "category": "long",
+    "difficulty": "hard",
+    "duration_category": "long",
+    "expected_issues": [
+      "long_text",
+      "consistency",
+      "proper_nouns",
+      "scientific_terms"
+    ]
+  },
+  {
+    "id": "en_edge_punctuation_01",
+    "text": "What? Really?! Are you sure... Hmm, interesting.",
+    "language": "en",
     "category": "edge_case",
     "difficulty": "medium",
-    "expected_issues": ["punctuation_prosody"]
+    "duration_category": "short",
+    "expected_issues": [
+      "punctuation_prosody"
+    ]
   },
   {
-    "id": "edge_url_01",
-    "text": "Подробности на сайте www.example.com/products/new-item",
-    "language": "ru",
+    "id": "en_edge_url_01",
+    "text": "Visit our website at www.example.com/products/new-arrival for more details.",
+    "language": "en",
     "category": "edge_case",
     "difficulty": "hard",
-    "expected_issues": ["url_reading"]
+    "duration_category": "medium",
+    "expected_issues": [
+      "url_reading"
+    ]
   },
   {
-    "id": "edge_repeat_01",
-    "text": "Нет, нет, нет! Я категорически не согласен!",
-    "language": "ru",
+    "id": "en_edge_repeat_01",
+    "text": "No, no, no! I absolutely refuse to accept this!",
+    "language": "en",
     "category": "edge_case",
     "difficulty": "medium",
-    "expected_issues": ["repetition"]
+    "duration_category": "short",
+    "expected_issues": [
+      "repetition"
+    ]
   },
   {
-    "id": "edge_whisper_01",
-    "text": "Тише, тише... Не разбуди ребёнка.",
-    "language": "ru",
+    "id": "en_edge_list_01",
+    "text": "Your shopping cart contains: apples, bananas, milk, bread, eggs, butter, and cheese.",
+    "language": "en",
+    "category": "edge_case",
+    "difficulty": "medium",
+    "duration_category": "medium",
+    "expected_issues": [
+      "enumeration"
+    ]
+  },
+  {
+    "id": "en_edge_poetry_01",
+    "text": "Two roads diverged in a yellow wood, and sorry I could not travel both and be one traveler, long I stood and looked down one as far as I could to where it bent in the undergrowth.",
+    "language": "en",
     "category": "edge_case",
     "difficulty": "hard",
-    "expected_issues": ["whisper_tone"]
+    "duration_category": "medium",
+    "expected_issues": [
+      "rhythm",
+      "poetic_register"
+    ]
   },
   {
-    "id": "edge_list_01",
-    "text": "В корзину добавлены: молоко, хлеб, яйца, масло и сыр.",
-    "language": "ru",
+    "id": "en_edge_email_01",
+    "text": "Send the report to john.smith@company.com by end of business today.",
+    "language": "en",
     "category": "edge_case",
     "difficulty": "medium",
-    "expected_issues": ["enumeration"]
+    "duration_category": "short",
+    "expected_issues": [
+      "email_reading"
+    ]
   },
   {
-    "id": "edge_poetry_01",
-    "text": "У лукоморья дуб зелёный, златая цепь на дубе том, и днём и ночью кот учёный всё ходит по цепи кругом.",
-    "language": "ru",
+    "id": "en_edge_whisper_01",
+    "text": "Shh, be quiet... Don't wake the baby.",
+    "language": "en",
     "category": "edge_case",
     "difficulty": "hard",
-    "expected_issues": ["rhythm", "archaic_words"]
+    "duration_category": "short",
+    "expected_issues": [
+      "whisper_tone"
+    ]
   },
   {
-    "id": "edge_email_01",
-    "text": "Отправьте документ на почту info@company.ru до конца рабочего дня.",
-    "language": "ru",
+    "id": "en_edge_sarcasm_01",
+    "text": "Oh great, another meeting that could have been an email. Wonderful. Just what I needed today.",
+    "language": "en",
     "category": "edge_case",
-    "difficulty": "medium",
-    "expected_issues": ["email_reading"]
+    "difficulty": "hard",
+    "duration_category": "medium",
+    "expected_issues": [
+      "sarcasm_tone"
+    ]
   },
   {
-    "id": "stress_test_01",
-    "text": "А",
-    "language": "ru",
+    "id": "en_stress_test_01",
+    "text": "Hi.",
+    "language": "en",
     "category": "stress_test",
     "difficulty": "easy",
-    "expected_issues": ["minimal_input"]
+    "duration_category": "short",
+    "expected_issues": [
+      "minimal_input"
+    ]
   },
   {
-    "id": "stress_test_02",
-    "text": "!!!???...",
-    "language": "ru",
+    "id": "en_stress_test_02",
+    "text": "Supercalifragilisticexpialidocious is a fantastically long word from the classic movie.",
+    "language": "en",
     "category": "stress_test",
     "difficulty": "hard",
-    "expected_issues": ["punctuation_only"]
+    "duration_category": "medium",
+    "expected_issues": [
+      "extremely_long_word"
+    ]
   },
   {
-    "id": "stress_test_03",
-    "text": "Аббревиатура ВНИИГИПРОЦЕМЕНТМАШАВТОМАТИЗАЦИЯ является одной из самых длинных в русском языке.",
-    "language": "ru",
+    "id": "en_stress_test_03",
+    "text": "The sixth sick sheik's sixth sheep's sick.",
+    "language": "en",
     "category": "stress_test",
     "difficulty": "hard",
-    "expected_issues": ["extremely_long_word"]
+    "duration_category": "short",
+    "expected_issues": [
+      "tongue_twister"
+    ]
   },
   {
-    "id": "fantasy_names_01",
-    "text": "Великий маг Гэндальф встретил Фродо Бэггинса у входа в Ривенделл.",
-    "language": "ru",
+    "id": "en_fantasy_names_01",
+    "text": "The great wizard Gandalf met Frodo Baggins at the entrance to Rivendell.",
+    "language": "en",
     "category": "fantasy_names",
     "difficulty": "hard",
-    "expected_issues": ["fantasy_proper_nouns"]
+    "duration_category": "medium",
+    "expected_issues": [
+      "fantasy_proper_nouns"
+    ]
   },
   {
-    "id": "fantasy_names_02",
-    "text": "Дейенерис Таргариен, мать драконов, правила семью королевствами.",
-    "language": "ru",
+    "id": "en_fantasy_names_02",
+    "text": "Daenerys Targaryen, Mother of Dragons, ruled over the Seven Kingdoms.",
+    "language": "en",
     "category": "fantasy_names",
     "difficulty": "hard",
-    "expected_issues": ["fantasy_proper_nouns"]
+    "duration_category": "medium",
+    "expected_issues": [
+      "fantasy_proper_nouns"
+    ]
+  },
+  {
+    "id": "en_dialog_long_01",
+    "text": "Good morning, thank you for calling Acme Corporation customer support. My name is Sarah and I'll be helping you today. Before we begin, may I have your account number and the phone number associated with your account for verification purposes? Once I've confirmed your identity, I'd be happy to assist you with whatever you need. Whether it's a billing inquiry, a technical issue, or a service change, I'm here to make sure your experience is as smooth as possible. We also have a satisfaction survey at the end of the call, and your feedback truly helps us improve our services.",
+    "language": "en",
+    "category": "dialog",
+    "difficulty": "hard",
+    "duration_category": "long",
+    "expected_issues": [
+      "long_text",
+      "formal_register",
+      "intonation_shift"
+    ]
+  },
+  {
+    "id": "en_narration_01",
+    "text": "It was a dark and stormy night. The wind howled through the ancient oak trees that lined the winding road to the manor. Lightning split the sky, illuminating for just a brief moment the crumbling facade of Thornfield Hall. Inside, a single candle flickered in the window of the east wing, casting dancing shadows on walls that had witnessed centuries of secrets. The old housekeeper, Mrs. Fairfax, sat by the fire, her knitting needles clicking steadily as she listened to the storm rage outside. She had lived in this house for forty years, and yet on nights like this, even she felt a chill that had nothing to do with the weather. Somewhere above, on the third floor, a door creaked open, and footsteps — light, deliberate, almost ghostly — echoed down the corridor. Mrs. Fairfax paused her knitting and looked up at the ceiling, her expression unreadable.",
+    "language": "en",
+    "category": "long",
+    "difficulty": "hard",
+    "duration_category": "long",
+    "expected_issues": [
+      "long_text",
+      "narrative_tone",
+      "proper_nouns",
+      "atmosphere"
+    ]
+  },
+  {
+    "id": "en_medium_news_01",
+    "text": "The Federal Reserve announced today that it would hold interest rates steady at their current level, citing ongoing uncertainty in global markets and moderating inflation figures.",
+    "language": "en",
+    "category": "simple",
+    "difficulty": "medium",
+    "duration_category": "medium",
+    "expected_issues": [
+      "formal_register"
+    ]
+  },
+  {
+    "id": "en_medium_science_01",
+    "text": "Researchers at Stanford University published a groundbreaking study demonstrating that a new class of antibiotics can effectively combat drug-resistant bacteria without the side effects commonly associated with traditional treatments.",
+    "language": "en",
+    "category": "technical",
+    "difficulty": "hard",
+    "duration_category": "medium",
+    "expected_issues": [
+      "scientific_terms",
+      "proper_noun"
+    ]
   }
 ]

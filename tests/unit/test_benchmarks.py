@@ -18,7 +18,7 @@ class TestLoadTexts:
 
     def test_loads_all(self) -> None:
         texts = load_texts()
-        assert len(texts) == 50
+        assert len(texts) == 47
 
     def test_filter_by_category(self) -> None:
         texts = load_texts(category="simple")
@@ -27,13 +27,13 @@ class TestLoadTexts:
 
     def test_filter_by_language(self) -> None:
         texts = load_texts(language="en")
-        assert len(texts) >= 3
+        assert len(texts) == 47
         assert all(
             str(t.get("language", "")).startswith("en") for t in texts
         )
 
     def test_filter_combined(self) -> None:
-        texts = load_texts(category="simple", language="ru")
+        texts = load_texts(category="simple", language="en")
         assert len(texts) >= 2
 
     def test_texts_have_required_fields(self) -> None:
@@ -43,6 +43,45 @@ class TestLoadTexts:
             assert "text" in t
             assert "language" in t
             assert "category" in t
+
+    def test_filter_by_duration(self) -> None:
+        for dur in ("short", "medium", "long"):
+            texts = load_texts(duration=dur)
+            assert len(texts) >= 1
+            assert all(
+                t.get("duration_category") == dur for t in texts
+            )
+
+    def test_all_have_duration_category(self) -> None:
+        texts = load_texts()
+        valid = {"short", "medium", "long"}
+        for t in texts:
+            assert "duration_category" in t, (
+                f"Missing duration_category in {t['id']}"
+            )
+            assert t["duration_category"] in valid, (
+                f"Invalid duration_category '{t['duration_category']}'"
+                f" in {t['id']}"
+            )
+
+    def test_english_texts_coverage(self) -> None:
+        texts = load_texts(language="en")
+        assert len(texts) == 47
+        categories = {str(t["category"]) for t in texts}
+        expected_cats = {
+            "simple", "dialog", "names", "numbers",
+            "emotion", "long", "technical",
+        }
+        assert expected_cats.issubset(categories), (
+            f"Missing EN categories: {expected_cats - categories}"
+        )
+
+    def test_duration_distribution(self) -> None:
+        texts = load_texts()
+        durations = [t["duration_category"] for t in texts]
+        assert durations.count("short") >= 5
+        assert durations.count("medium") >= 10
+        assert durations.count("long") >= 5
 
 
 class TestComputeSummary:
@@ -144,6 +183,27 @@ class TestReport:
         assert "| t1 |" in report
         assert "0.010" in report
 
+    def test_report_includes_duration(self) -> None:
+        results = [
+            BenchmarkResult(
+                text_id="t1",
+                text="hello",
+                language="en",
+                category="simple",
+                difficulty="easy",
+                duration_category="short",
+                status="completed",
+                is_approved=True,
+                wer=0.0,
+                iterations=1,
+                latency_seconds=1.0,
+            ),
+        ]
+        summary = compute_summary(results)
+        report = print_report(results, summary)
+        assert "Duration" in report
+        assert "short" in report
+
 
 class TestBenchmarkTextsFile:
     """Tests for the benchmark texts JSON file."""
@@ -152,7 +212,7 @@ class TestBenchmarkTextsFile:
         path = Path("scripts/benchmark_texts.json")
         data = json.loads(path.read_text())
         assert isinstance(data, list)
-        assert len(data) == 50
+        assert len(data) == 47
 
     def test_unique_ids(self) -> None:
         path = Path("scripts/benchmark_texts.json")
