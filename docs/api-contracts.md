@@ -2,6 +2,9 @@
 
 > Complete reference for interacting with the ReflexTTS API from Python.
 > Base URL: `http://localhost:8080` (default).
+>
+> **Internal client contracts (VLLMClient, TTSClient, ASRClient)** → [docs/specs/tools-apis.md](specs/tools-apis.md)
+> **System architecture & failure modes** → [docs/system-design.md](system-design.md)
 
 ---
 

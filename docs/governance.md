@@ -1,5 +1,8 @@
 # Governance, Risk Management & Compliance
 
+> **Расширенная таблица failure modes, guardrails и ограничений** → [docs/system-design.md](system-design.md) (секция 7-8)
+> **Observability и метрики** → [docs/specs/observability-evals.md](specs/observability-evals.md)
+
 ### 1. Risk Register
 
 | Risk | Probability / Impact | Detection | Mitigation | Residual Risk |
