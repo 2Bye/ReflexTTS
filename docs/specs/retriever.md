@@ -1,24 +1,24 @@
 # Spec: Retriever / Retrieval
 
-> Источники данных, индексы, поиск, реранкинг, ограничения.
+> Data sources, indexes, search, reranking, limitations.
 
 ---
 
-## Текущее состояние: Retrieval-free
+## Current State: Retrieval-free
 
-В PoC-версии ReflexTTS **нет классического retrieval-контура** (vector store, embedding search, RAG). Система работает в generative-only режиме.
+The PoC version of ReflexTTS has **no classical retrieval pipeline** (vector store, embedding search, RAG). The system operates in generative-only mode.
 
-## Retrieval-подобные механизмы (реализованные)
+## Retrieval-like Mechanisms (Implemented)
 
 ### 1. Intra-session Phoneme Lookup
 
-| Параметр | Значение |
-|----------|---------|
-| **Источник** | `GraphState.errors[].hotfix_hint` (от Critic) |
-| **Индекс** | Нет — прямая итерация по `errors[]` |
-| **Поиск** | `word_expected in segment.text` (substring match) |
-| **Результат** | Инъекция phoneme hint в текст сегмента |
-| **Scope** | Только текущая сессия (intra-session) |
+| Parameter | Value |
+|-----------|-------|
+| **Source** | `GraphState.errors[].hotfix_hint` (from Critic) |
+| **Index** | None — direct iteration over `errors[]` |
+| **Search** | `word_expected in segment.text` (substring match) |
+| **Result** | Phoneme hint injection into segment text |
+| **Scope** | Current session only (intra-session) |
 
 ```python
 # director.py → _apply_hotfix_hints()
@@ -29,28 +29,48 @@ for error in state.errors:
                 segment.text = f"{error.hotfix_hint}{error.word_expected}"
 ```
 
-### 2. Intra-session Segment Cache
+### 2. Cross-session Pronunciation Cache
 
-| Параметр | Значение |
-|----------|---------|
-| **Источник** | `GraphState.segment_audio[]` + `segment_approved[]` |
-| **Индекс** | Позиционный (segment index) |
-| **Поиск** | `segment_approved[i] == True` → skip |
-| **Результат** | Пропуск пересинтеза approved сегментов |
-| **Scope** | Только текущая сессия |
+| Parameter | Value |
+|-----------|-------|
+| **Source** | `PronunciationCache` (word + voice_id → phoneme hint) |
+| **Index** | In-memory dict, key = `(word.lower(), voice_id)` |
+| **Search** | Exact match, threshold = 2 successful uses |
+| **Result** | Proactive phoneme hint injection before synthesis |
+| **Scope** | ✅ Cross-session (persistent across requests) |
 
-### 3. Voice ID → Speaker Mapping
+### 3. Cross-session Segment Audio Cache
 
-| Параметр | Значение |
-|----------|---------|
-| **Источник** | `VOICE_MAP` в `tts_client.py` |
-| **Индекс** | Статический dict (3 записи) |
-| **Поиск** | `O(1)` dict lookup |
-| **Результат** | `"speaker_1"` → `"中文女"` |
+| Parameter | Value |
+|-----------|-------|
+| **Source** | `SegmentCache` (text + voice + emotion → WAV bytes) |
+| **Index** | SHA-256 hash of `(text, voice_id, emotion)` |
+| **Search** | Exact match, WER=0 required for caching |
+| **Result** | Skip GPU synthesis entirely for cached segments |
+| **Scope** | ✅ Cross-session, TTL 24h, LRU eviction |
 
-## Планируемый retrieval-контур (MAS-4)
+### 4. Intra-session Segment Cache
 
-### Pronunciation Memory Store
+| Parameter | Value |
+|-----------|-------|
+| **Source** | `GraphState.segment_audio[]` + `segment_approved[]` |
+| **Index** | Positional (segment index) |
+| **Search** | `segment_approved[i] == True` → skip |
+| **Result** | Skip re-synthesis of approved segments |
+| **Scope** | Current session only |
+
+### 5. Voice ID → Speaker Mapping
+
+| Parameter | Value |
+|-----------|-------|
+| **Source** | `VOICE_MAP` in `tts_client.py` |
+| **Index** | Static dict (3 entries) |
+| **Search** | `O(1)` dict lookup |
+| **Result** | `"speaker_1"` → `"中文女"` |
+
+## Future Retrieval (MAS-4)
+
+### Pronunciation Memory Store (Redis backend)
 
 ```
 Key:   (word: str, voice_id: str)
@@ -66,7 +86,7 @@ Search:  Exact match
 Policy:  LRU eviction, max 10K entries
 ```
 
-### Segment Audio Cache
+### Segment Audio Cache (Redis backend)
 
 ```
 Key:   hash(text + voice_id + emotion)
@@ -82,11 +102,10 @@ Search:  Exact match
 Policy:  TTL 24h, maxmemory 1GB
 ```
 
-### Ограничения
+### Limitations
 
-| Ограничение | Описание |
-|-------------|----------|
-| Нет embedding search | Приблизительный вспоминание невозможно |
-| Нет reranking | Только exact match lookup |
-| Нет cross-session learning в PoC | Каждый запрос обрабатывается с чистого листа |
-| Нет persistence | In-memory store теряется при рестарте |
+| Limitation | Description |
+|------------|-------------|
+| No embedding search | Approximate recall not possible |
+| No reranking | Exact match lookup only |
+| No persistence (PoC) | In-memory caches lost on restart |

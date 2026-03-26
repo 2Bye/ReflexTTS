@@ -1,28 +1,28 @@
 # Spec: Tools / APIs
 
-> Контракты, ошибки, timeout, side effects, защита.
+> Contracts, errors, timeout, side effects, protection.
 
 ---
 
 ## 1. VLLMClient — LLM Inference
 
-**Файл:** `src/inference/vllm_client.py`
-**Модель:** Qwen3-8B-Instruct AWQ 4-bit
-**Протокол:** OpenAI-compatible API (AsyncOpenAI)
+**File:** `src/inference/vllm_client.py`
+**Model:** Qwen3-8B-Instruct AWQ 4-bit
+**Protocol:** OpenAI-compatible API (AsyncOpenAI)
 
-### Контракт
+### Contract
 
-| Метод | Signature | Return | Used by |
-|-------|-----------|--------|---------|
+| Method | Signature | Return | Used by |
+|--------|-----------|--------|---------|
 | `chat()` | `(system_prompt, user_message, temperature?, max_tokens?)` | `str` | — |
 | `chat_json()` | `(system_prompt, user_message, response_model: type[T])` | `T` (Pydantic) | Director, Critic |
 | `health_check()` | `()` | `bool` | ModelRegistry |
 | `close()` | `()` | `None` | Pipeline cleanup |
 
-### Error handling
+### Error Handling
 
-| Ошибка | Обработка | Retry |
-|--------|----------|-------|
+| Error | Handling | Retry |
+|-------|----------|-------|
 | `APIConnectionError` | Exponential backoff: `2^attempt` sec | 5× |
 | `APITimeoutError` | Exponential backoff | 5× |
 | `APIStatusError` | Immediate fail → `VLLMResponseError` | ❌ |
@@ -31,8 +31,8 @@
 
 ### Configuration
 
-| Параметр | Default | Env var |
-|----------|---------|---------|
+| Parameter | Default | Env var |
+|-----------|---------|---------|
 | `base_url` | `http://localhost:8000/v1` | `VLLM_BASE_URL` |
 | `model_name` | `Qwen/Qwen3-8B-AWQ` | `VLLM_MODEL_NAME` |
 | `max_tokens` | 4096 | `VLLM_MAX_TOKENS` |
@@ -40,7 +40,7 @@
 | `timeout_seconds` | 300 | `VLLM_TIMEOUT_SECONDS` |
 | `max_retries` | 5 | `VLLM_MAX_RETRIES` |
 
-### Side effects
+### Side Effects
 - **GPU**: ~5 GB VRAM allocated continuously
 - **Network**: HTTP requests to vLLM server
 - **No persistent storage** — stateless per request
@@ -49,21 +49,21 @@
 
 ## 2. TTSClient — Speech Synthesis
 
-**Файл:** `src/inference/tts_client.py`
-**Модель:** CosyVoice3 0.5B (Fun-CosyVoice3-0.5B)
-**Протокол:** HTTP REST (httpx)
+**File:** `src/inference/tts_client.py`
+**Model:** CosyVoice3 0.5B (Fun-CosyVoice3-0.5B)
+**Protocol:** HTTP REST (httpx)
 
-### Контракт
+### Contract
 
-| Метод | Signature | Return | Used by |
-|-------|-----------|--------|---------|
+| Method | Signature | Return | Used by |
+|--------|-----------|--------|---------|
 | `synthesize()` | `(text, voice_id, instruct?)` | `AudioResult(waveform, sample_rate)` | Actor, Editor |
 | `clone_voice()` | `(text, ref_audio, ref_text)` | `AudioResult` | — (disabled in PoC) |
 | `load_model()` | `()` | `None` | Pipeline startup |
 | `health_check()` | `()` | `bool` | ModelRegistry |
 | `close()` | `()` | `None` | Pipeline cleanup |
 
-### Voice mapping
+### Voice Mapping
 
 | voice_id | CosyVoice speaker | Language |
 |----------|-------------------|----------|
@@ -71,22 +71,22 @@
 | `speaker_2` | 中文男 | Chinese |
 | `speaker_3` | 英文女 | English |
 
-### Error handling
+### Error Handling
 
-| Ошибка | Причина | Обработка |
-|--------|---------|----------|
+| Error | Cause | Handling |
+|-------|-------|----------|
 | `httpx.TimeoutException` | CosyVoice GPU overload | Pipeline fail |
 | `AssertionError` (instruct token) | Missing `<\|endofprompt\|>` | Auto-appended in server.py |
 | HTTP 500 | CosyVoice internal error | Pipeline fail |
 
 ### Configuration
 
-| Параметр | Default | Env var |
-|----------|---------|---------|
+| Parameter | Default | Env var |
+|-----------|---------|---------|
 | `base_url` | `http://localhost:9880` | `COSYVOICE_BASE_URL` |
 | `sample_rate` | 24000 | `COSYVOICE_SAMPLE_RATE` |
 
-### Side effects
+### Side Effects
 - **GPU**: ~2 GB VRAM
 - **Audio output**: WAV bytes returned in response (not written to disk)
 
@@ -94,14 +94,14 @@
 
 ## 3. ASRClient — Speech Recognition
 
-**Файл:** `src/inference/asr_client.py`
-**Модель:** WhisperX large-v3 + Wav2Vec2 (forced alignment)
-**Протокол:** HTTP REST (httpx)
+**File:** `src/inference/asr_client.py`
+**Model:** WhisperX large-v3 + Wav2Vec2 (forced alignment)
+**Protocol:** HTTP REST (httpx)
 
-### Контракт
+### Contract
 
-| Метод | Signature | Return | Used by |
-|-------|-----------|--------|---------|
+| Method | Signature | Return | Used by |
+|--------|-----------|--------|---------|
 | `transcribe()` | `(audio_bytes, sample_rate)` | `TranscriptionResult` | Critic |
 | `load_model()` | `()` | `None` | Pipeline startup |
 | `health_check()` | `()` | `bool` | ModelRegistry |
@@ -126,14 +126,14 @@ WordTimestamp(
 
 ### Configuration
 
-| Параметр | Default | Env var |
-|----------|---------|---------|
+| Parameter | Default | Env var |
+|-----------|---------|---------|
 | `base_url` | `http://localhost:9881` | `WHISPERX_BASE_URL` |
 | `model_name` | `large-v3` | `WHISPERX_MODEL_NAME` |
 | `device` | `cuda` | `WHISPERX_DEVICE` |
 | `compute_type` | `float16` | `WHISPERX_COMPUTE_TYPE` |
 
-### Side effects
+### Side Effects
 - **GPU**: ~3 GB VRAM
 - **No persistent storage**
 
@@ -143,8 +143,8 @@ WordTimestamp(
 
 ### Input Sanitizer
 
-| Метод | Signature | Return |
-|-------|-----------|--------|
+| Method | Signature | Return |
+|--------|-----------|--------|
 | `sanitize_input()` | `(text, max_length?, strict?)` | `SanitizeResult(is_safe, sanitized_text, reason, matched_patterns)` |
 | `strip_control_chars()` | `(text)` | `str` |
 
@@ -152,16 +152,16 @@ WordTimestamp(
 
 ### PII Masker
 
-| Метод | Signature | Return |
-|-------|-----------|--------|
+| Method | Signature | Return |
+|--------|-----------|--------|
 | `mask_pii()` | `(text)` | `PIIResult(masked_text, pii_count, pii_types)` |
 
 **Types**: email, phone, card, passport, INN, IP address
 
 ### Voice Whitelist
 
-| Метод | Signature | Return |
-|-------|-----------|--------|
+| Method | Signature | Return |
+|--------|-----------|--------|
 | `validate_voice()` | `(voice_id, config)` | `None` (raises `VoiceNotAllowedError`) |
 
 ---
@@ -178,11 +178,11 @@ WordTimestamp(
 | `/metrics` | GET | — | Prometheus text | 200 |
 | `/ws/{session_id}` | WS | — | Agent log stream | — |
 
-### Error codes
+### Error Codes
 
 | Code | Cause |
 |------|-------|
 | 400 | Invalid input, prompt injection, disallowed voice |
 | 404 | Session not found |
 | 409 | Audio not ready (still processing) |
-| 503 | Pipeline busy (another synthesis in progress) |
+| 429 | Rate limit exceeded (10 req/min per IP) |

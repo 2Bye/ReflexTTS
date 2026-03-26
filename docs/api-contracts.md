@@ -590,8 +590,8 @@ resp = httpx.post("http://localhost:8080/synthesize", json={
 
 if resp.status_code == 400:
     print(f"Bad request: {resp.json()['detail']}")
-elif resp.status_code == 503:
-    print("Server busy, retry later")
+elif resp.status_code == 429:
+    print("Rate limited, retry later")
 elif resp.status_code == 202:
     print(f"Started: {resp.json()['session_id']}")
 ```

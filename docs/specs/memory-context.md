@@ -8,7 +8,7 @@
 
 ### SessionStore (In-Memory / Redis)
 
-**Файлы:** `src/api/sessions.py`, `src/api/redis_store.py`
+**Files:** `src/api/sessions.py`, `src/api/redis_store.py`
 
 ```python
 class SessionState(StrEnum):
@@ -37,13 +37,13 @@ class Session:
 - `REDIS_USE_REDIS=false` (default) → `SessionStore` (in-memory dict)
 - `REDIS_USE_REDIS=true` → `RedisSessionStore` (Redis, TTL-based)
 
-| Операция | API | Complexity |
-|----------|-----|-----------|
+| Operation | API | Complexity |
+|-----------|-----|-----------|
 | Create | `_store.create(text, voice_id)` | O(1) |
 | Get | `_store.get(session_id)` | O(1) |
 | Update | `_store.update(session)` | O(1) |
-| List | Нет (PoC) | — |
-| Delete | Нет (GC при перезапуске) | — |
+| List | None (PoC) | — |
+| Delete | None (GC on restart) | — |
 
 ### Lifecycle
 
@@ -52,23 +52,23 @@ queued ──▶ processing ──▶ completed
                     └──▶ failed
 ```
 
-**TTL**: In-memory: нет. Redis: `REDIS_SESSION_TTL_SECONDS` = 3600s (1 час).
+**TTL**: In-memory: none. Redis: `REDIS_SESSION_TTL_SECONDS` = 3600s (1 hour).
 
 ---
 
 ## 2. GraphState — Pipeline Context
 
-### Размер в памяти (типичный запрос)
+### Size in Memory (typical request)
 
-| Поле | Примерный размер | Описание |
-|------|------------------|----------|
-| `text` | 1-5 KB | Входной текст |
-| `ssml_markup` | 2-10 KB | JSON с сегментами |
-| `audio_bytes` | 100 KB – 5 MB | Финальный WAV |
+| Field | Approximate Size | Description |
+|-------|------------------|-------------|
+| `text` | 1-5 KB | Input text |
+| `ssml_markup` | 2-10 KB | JSON with segments |
+| `audio_bytes` | 100 KB – 5 MB | Final WAV |
 | `segment_audio[]` | 100 KB – 5 MB | Per-segment WAV |
-| `errors[]` | 0.5-5 KB | Список ошибок |
-| `agent_log[]` | 1-5 KB | Журнал действий |
-| **Итого per session** | **~0.5 – 15 MB** | — |
+| `errors[]` | 0.5-5 KB | Error list |
+| `agent_log[]` | 1-5 KB | Agent action journal |
+| **Total per session** | **~0.5 – 15 MB** | — |
 
 ### Serialization
 
@@ -80,27 +80,28 @@ async def director_node(state: dict) -> dict:
     return gs.model_dump()                   # Pydantic → dict
 ```
 
-Каждый узел: `model_validate` (deserialize) → business logic → `model_dump` (serialize).
-Overhead: ~1ms на 1MB state.
+Each node: `model_validate` (deserialize) → business logic → `model_dump` (serialize).
+Overhead: ~1ms per 1MB state.
 
 ---
 
 ## 3. Memory Policy
 
-### Текущая (PoC)
+### Current
 
-| Политика | Реализация |
-|----------|-----------|
-| **No cross-session memory** | → Заменено на `PronunciationCache` + `SegmentCache` |
-| **Intra-session only** | `GraphState` хранит всё состояние между итерациями |
-| **Eviction** | In-memory: нет. Redis: TTL. Caches: LRU |
-| **Persistence** | In-memory: нет. Redis: да |
+| Policy | Implementation |
+|--------|---------------|
+| **Cross-session pronunciation** | `PronunciationCache` — word+voice → phoneme hint |
+| **Cross-session audio** | `SegmentCache` — SHA-256(text+voice+emotion) → WAV |
+| **Intra-session only** | `GraphState` stores all state between iterations |
+| **Eviction** | In-memory: none. Redis: TTL. Caches: LRU |
+| **Persistence** | In-memory: none. Redis: yes |
 | **Deduplication** | `SegmentCache`: SHA-256(text+voice+emotion), WER=0 only |
 
-### Планируемая (MAS-4)
+### Future (MAS-4)
 
-| Память | Тип | Storage | Eviction |
-|--------|-----|---------|----------|
+| Memory | Type | Storage | Eviction | Status |
+|--------|------|---------|----------|--------|
 | **Pronunciation memory** | Long-term | In-memory (Redis planned) | LRU, max 10K | ✅ `pronunciation_cache.py` |
 | **Segment cache** | Long-term | In-memory (Redis planned) | TTL 24h, LRU 1K | ✅ `segment_cache.py` |
 | **Repair log** | Long-term | SQLite | FIFO, max 100K | ⬜ Planned |
@@ -112,10 +113,10 @@ Overhead: ~1ms на 1MB state.
 
 ### vLLM Configuration
 
-| Параметр | Значение | Описание |
-|----------|---------|----------|
-| `max-model-len` | 16384 tokens | Максимальное окно контекста |
-| `max_tokens` (response) | 4096 tokens | Максимум в ответе |
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| `max-model-len` | 16384 tokens | Maximum context window |
+| `max_tokens` (response) | 4096 tokens | Maximum in response |
 | Total per request | ≤ 20480 tokens | Prompt + response |
 
 ### Budget per Agent
@@ -127,8 +128,8 @@ Overhead: ~1ms на 1MB state.
 
 ### Truncation Guards
 
-| Что | Лимит | Где |
-|-----|-------|-----|
+| What | Limit | Where |
+|------|-------|-------|
 | User input text | 5000 chars | `SECURITY_MAX_TEXT_LENGTH` |
 | Judge input: target text | 500 chars | In JUDGE_PROMPT |
 | Judge input: timestamps | Max 10 | In JUDGE_PROMPT |
@@ -148,11 +149,11 @@ Overhead: ~1ms на 1MB state.
 
 ## 5. Data Retention & Privacy
 
-| Данные | Retention | Маскировка | Доступ |
-|--------|-----------|-----------|--------|
+| Data | Retention | Masking | Access |
+|------|-----------|---------|--------|
 | User text | Session lifetime | PII masked before pipeline | API, pipeline |
-| Audio (intermediate) | Overwritten при retry | N/A | Pipeline only |
+| Audio (intermediate) | Overwritten on retry | N/A | Pipeline only |
 | Audio (final) | Session lifetime | N/A | API (GET /session/{id}/audio) |
-| Agent log | Session lifetime | Нет PII | API, WebSocket |
+| Agent log | Session lifetime | No PII | API, WebSocket |
 | Prometheus metrics | App lifetime | Anonymized | /metrics endpoint |
-| Raw logs | stdout/stderr | ✅ **PII удалён** (`director_input` логирует только text_length) | Log aggregator |
+| Raw logs | stdout/stderr | ✅ **PII removed** (`director_input` logs only text_length) | Log aggregator |

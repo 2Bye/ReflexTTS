@@ -1,38 +1,38 @@
 # Spec: Observability / Evals
 
-> Метрики, логи, трейсы и проверки, которые собираются.
+> Metrics, logs, traces, and quality checks.
 
 ---
 
 ## 1. Prometheus Metrics
 
-**Файл:** `src/monitoring/__init__.py`
+**File:** `src/monitoring/__init__.py`
 **Endpoint:** `GET /metrics`
 **Format:** Prometheus text exposition
 
-### Метрики
+### Metrics
 
-| Metric | Type | Labels | Описание |
-|--------|------|--------|----------|
-| `reflex_requests_total` | Counter | `voice_id` | Общее число запросов |
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `reflex_requests_total` | Counter | `voice_id` | Total request count |
 | `reflex_request_latency_seconds` | Histogram | — | E2E latency per request |
-| `reflex_pipeline_iterations` | Histogram | — | Число итераций до завершения |
-| `reflex_pipeline_wer` | Histogram | — | Распределение WER при завершении |
+| `reflex_pipeline_iterations` | Histogram | — | Iterations until completion |
+| `reflex_pipeline_wer` | Histogram | — | WER distribution at completion |
 | `reflex_pipeline_status_total` | Counter | `status` | completed / failed / escalated |
-| `reflex_active_sessions` | Gauge | — | Число активных сессий (0 или 1 в PoC) |
+| `reflex_active_sessions` | Gauge | — | Active sessions count (0 or 1 in PoC) |
 | `reflex_agent_latency_seconds` | Histogram | — | Latency per agent step |
-| `reflex_errors_total` | Counter | `type` | Число ошибок по типам |
+| `reflex_errors_total` | Counter | `type` | Error count by type |
 
 ### Histogram Buckets
 
-| Метрика | Buckets |
-|---------|---------|
+| Metric | Buckets |
+|--------|---------|
 | `request_latency` | 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0 |
 | `pipeline_iterations` | 1.0, 2.0, 3.0, 4.0, 5.0 |
 | `pipeline_wer` | 0.0, 0.01, 0.02, 0.05, 0.1, 0.15, 0.2, 0.5, 1.0 |
 | `agent_latency` | 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0 |
 
-### Пример вывода `/metrics`
+### Example `/metrics` Output
 
 ```
 reflex_requests_total{voice_id="speaker_1"} 42
@@ -53,23 +53,23 @@ reflex_active_sessions 0
 
 ## 2. Structured Logging
 
-**Файл:** `src/log.py`
+**File:** `src/log.py`
 **Library:** structlog
 **Formats:** JSON (production), colored console (dev)
 
 ### Log Events
 
-| Event | Level | Agent | Описание |
-|-------|-------|-------|----------|
-| `director_start` | INFO | Director | Начало анализа текста |
-| `director_llm_response` | INFO | Director | LLM ответ (segments count) |
-| `director_segment` | INFO | Director | Детали сегмента |
-| `director_done` | INFO | Director | Завершение с instruct |
+| Event | Level | Agent | Description |
+|-------|-------|-------|-------------|
+| `director_start` | INFO | Director | Text analysis started |
+| `director_llm_response` | INFO | Director | LLM response (segments count) |
+| `director_segment` | INFO | Director | Segment details |
+| `director_done` | INFO | Director | Completion with instruct |
 | `hotfix_applied` | DEBUG | Director | Phoneme hint injected |
 | `vllm_request_success` | DEBUG | VLLMClient | Attempt, tokens used |
 | `vllm_request_retry` | WARNING | VLLMClient | Retry attempt |
 | `vllm_json_parse_retry` | WARNING | VLLMClient | JSON fallback |
-| `vllm_json_parse_error` | ERROR | VLLMClient | Finall parse fail |
+| `vllm_json_parse_error` | ERROR | VLLMClient | Final parse fail |
 | `route_approved` | INFO | Orchestrator | Audio approved |
 | `route_editor` | INFO | Orchestrator | Editor routing |
 | `route_hotfix` | INFO | Orchestrator | Hotfix routing |
@@ -108,9 +108,9 @@ reflex_active_sessions 0
 
 ### Log Metadata
 
-| Поле | Источник | Описание |
-|------|---------|----------|
-| `service` | `LOG_SERVICE_NAME` | Константа "reflex-tts" |
+| Field | Source | Description |
+|-------|--------|-------------|
+| `service` | `LOG_SERVICE_NAME` | Constant "reflex-tts" |
 | `logger` | `__name__` | Python module path |
 | `level` | structlog | info/warning/error/debug |
 | `timestamp` | structlog ISO | UTC timestamp |
@@ -119,16 +119,16 @@ reflex_active_sessions 0
 
 ## 3. Tracing
 
-### Текущее состояние
+### Current State
 
-| Аспект | Реализация |
-|--------|-----------|
-| **trace_id** | `GraphState.trace_id` = session UUID | 
-| **Propagation** | Передаётся через GraphState |
-| **OpenTelemetry** | ✅ Реализовано (`src/monitoring/tracing.py`). `LOG_ENABLE_OTEL=true` → TracerProvider + OTLP/Console exporter |
-| **Distributed tracing** | ✅ OTel spans для agent nodes (via `get_tracer()`) |
+| Aspect | Implementation |
+|--------|---------------|
+| **trace_id** | `GraphState.trace_id` = session UUID |
+| **Propagation** | Passed through GraphState |
+| **OpenTelemetry** | ✅ Implemented (`src/monitoring/tracing.py`). `LOG_ENABLE_OTEL=true` → TracerProvider + OTLP/Console exporter |
+| **Distributed tracing** | ✅ OTel spans for agent nodes (via `get_tracer()`) |
 
-### Планируемое (production)
+### Span Hierarchy (production)
 
 ```
 FastAPI → OpenTelemetry → Jaeger/Tempo
@@ -144,7 +144,7 @@ FastAPI → OpenTelemetry → Jaeger/Tempo
   └── Span: WhisperX transcribe (audio_duration, confidence)
 ```
 
-> ✅ **Реализовано**: `src/monitoring/tracing.py` — `init_tracing(config)` + `get_tracer(name)`. NoOp при `LOG_ENABLE_OTEL=false`.
+> ✅ **Implemented**: `src/monitoring/tracing.py` — `init_tracing(config)` + `get_tracer(name)`. NoOp when `LOG_ENABLE_OTEL=false`.
 
 ---
 
@@ -152,8 +152,8 @@ FastAPI → OpenTelemetry → Jaeger/Tempo
 
 ### Automated Quality Metrics
 
-| Метрика | Формула | Порог | Описание |
-|---------|---------|-------|----------|
+| Metric | Formula | Threshold | Description |
+|--------|---------|-----------|-------------|
 | **WER** | Levenshtein(target, transcript) / len(target) | < 0.01 target | Word Error Rate |
 | **Convergence** | `0.5(1-WER) + 0.3×SECS + 0.2×(PESQ/4.5)` | ≥ 0.85 | Composite quality |
 | **SECS** | cosine_similarity(speaker_emb, ref_emb) | > 0.85 | Voice consistency |
@@ -161,18 +161,18 @@ FastAPI → OpenTelemetry → Jaeger/Tempo
 
 ### Benchmark Suite
 
-**Файлы:** `scripts/benchmark_texts.json`, `scripts/run_benchmarks.py`
+**Files:** `scripts/benchmark_texts.json`, `scripts/run_benchmarks.py`
 
-| Параметр | Значение |
-|----------|---------|
-| Количество текстов | 47 (EN) |
-| Категории | short / medium / long |
-| Метрики в отчёте | WER, latency, RTF, iterations |
-| Нагрузочное тестирование | `scripts/load_test.py` (Locust) |
+| Parameter | Value |
+|-----------|-------|
+| Number of texts | 47 (EN) |
+| Categories | short / medium / long |
+| Report metrics | WER, latency, RTF, iterations |
+| Load testing | `scripts/load_test.py` (Locust) |
 
 ### Test Suite
 
-| Категория | Файлы | Тесты |
+| Category | Files | Tests |
 |----------|-------|-------|
 | Config | `test_config.py` | 8 |
 | Logging | `test_logging.py` | 4 |
@@ -198,14 +198,14 @@ FastAPI → OpenTelemetry → Jaeger/Tempo
   2. mypy --strict (type check)
   3. bandit (security scan)  
   4. detect-secrets (secret detection)
-  5. pytest (unit tests, 171)
+  5. pytest (unit tests, 193)
 ```
 
 ---
 
 ## 5. Alerting
 
-> ✅ **Реализовано**: `docker/prometheus/alerts.yml` + `docker/prometheus/prometheus.yml`
+> ✅ **Implemented**: `docker/prometheus/alerts.yml` + `docker/prometheus/prometheus.yml`
 
 | Alert | Condition | Severity |
 |-------|-----------|----------|

@@ -1,6 +1,6 @@
 # C4 Component Diagram — ReflexTTS Core
 
-> Уровень 3: внутреннее устройство ядра системы (Orchestrator + Agents).
+> Level 3: internal structure of the core system (Orchestrator + Agents).
 
 ```mermaid
 C4Component
@@ -10,7 +10,7 @@ C4Component
 
         Component(graph, "StateGraph", "LangGraph", "DAG: director → actor → critic → conditional_edges")
         Component(route, "route_after_critic()", "Python", "4-way routing: approved / hotfix / editor / max_retries")
-        Component(state, "GraphState", "Pydantic BaseModel", "~20 полей: input, director, actor, critic, control, log")
+        Component(state, "GraphState", "Pydantic BaseModel", "~20 fields: input, director, actor, critic, control, log")
 
         Component(director, "Director Agent", "Python + VLLMClient", "text → chat_json(DIRECTOR_PROMPT) → DirectorOutput(segments, emotions)")
         Component(actor, "Actor Agent", "Python + TTSClient", "segments → asyncio.gather(Semaphore=4) → segment_audio[] → audio_bytes")
@@ -52,20 +52,20 @@ C4Component
     Rel(editor, audio_metrics, "convergence_score()")
 ```
 
-## Детальная декомпозиция
+## Detailed Decomposition
 
 ### Orchestrator Components
 
-| Component | Файл | Ответственность |
-|-----------|------|-----------------|
-| `StateGraph` | `orchestrator/graph.py` | Построение графа LangGraph; 5 узлов + conditional edges |
-| `GraphState` | `orchestrator/state.py` | Shared state model; ~20 типизированных полей |
-| `route_after_critic()` | `orchestrator/graph.py` | 4-way routing после Critic; учитывает per-segment статус |
+| Component | File | Responsibility |
+|-----------|------|---------------|
+| `StateGraph` | `orchestrator/graph.py` | LangGraph graph construction; 5 nodes + conditional edges |
+| `GraphState` | `orchestrator/state.py` | Shared state model; ~20 typed fields |
+| `route_after_critic()` | `orchestrator/graph.py` | 4-way routing after Critic; considers per-segment status |
 
 ### Agent Components
 
-| Component | Файл | Input → Output |
-|-----------|------|----------------|
+| Component | File | Input → Output |
+|-----------|------|---------------|
 | `Director` | `agents/director.py` | `text` → `DirectorOutput(segments, emotions, phoneme_hints)` |
 | `Actor` | `agents/actor.py` | `segments[]` → `segment_audio[]` + `audio_bytes` (WAV) |
 | `Critic` | `agents/critic.py` | `segment_audio[]` → `errors[]`, `wer`, `is_approved`, `segment_approved[]` |
@@ -74,8 +74,8 @@ C4Component
 
 ### Schema Components
 
-| Component | Описание |
-|-----------|----------|
+| Component | Description |
+|-----------|-------------|
 | `Segment` | `text`, `emotion` (EmotionTag), `pause_before_ms`, `phoneme_hints[]` |
 | `DirectorOutput` | `segments[]`, `voice_id`, `language`, `notes` |
 | `CriticOutput` | `is_approved`, `errors[]`, `wer`, `summary` |
@@ -84,7 +84,7 @@ C4Component
 
 ### Inference Client Components
 
-| Component | Protocol | Key features |
+| Component | Protocol | Key Features |
 |-----------|----------|-------------|
 | `VLLMClient` | AsyncOpenAI | 3-step parse: strip `<think>` → `json.loads` → `_extract_json_object()` |
 | `TTSClient` | httpx | `VOICE_MAP`, `AudioResult`, GPU timeout protection |
@@ -92,9 +92,9 @@ C4Component
 
 ### Audio Utility Components
 
-| Component | Формула / Алгоритм |
+| Component | Formula / Algorithm |
 |-----------|-------------------|
 | `alignment.py` | `frame = (ms / 1000) × sample_rate / hop_length` |
-| `masking.py` | Binary mask + cosine taper на границах |
+| `masking.py` | Binary mask + cosine taper at boundaries |
 | `crossfade.py` | Equal-power: `√cos` × `√sin` blend |
 | `metrics.py` | `score = 0.5(1-WER) + 0.3×SECS + 0.2×(PESQ/4.5)` |

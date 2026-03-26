@@ -3,7 +3,7 @@
 > A self-correcting Text-to-Speech pipeline built on 4 agents:
 > **Director → Actor → Critic → Editor**, orchestrated via **LangGraph**.
 >
-> **Полная архитектура, ограничения и failure modes** →
+> **Full architecture, constraints and failure modes** →
 > [docs/system-design.md](system-design.md)
 
 ---
@@ -21,8 +21,8 @@
 9. [Audio Utilities](#7-audio-utilities)
 10. [End-to-End Example](#8-end-to-end-example)
 
-> **Подробные спецификации модулей** → [docs/specs/](specs/)
-> **C4 и workflow-диаграммы** → [docs/diagrams/](diagrams/)
+> **Detailed module specifications** → [docs/specs/](specs/)
+> **C4 and workflow diagrams** → [docs/diagrams/](diagrams/)
 
 ---
 
@@ -58,7 +58,7 @@ graph TD
 
 All agents communicate through a single `GraphState` structure (file `src/orchestrator/state.py`).
 
-> **Полная спецификация state, memory policy, context budget** →
+> **Full state, memory policy, context budget specification** →
 > [docs/specs/memory-context.md](specs/memory-context.md)
 
 | Group | Field | Type | Written by | Read by |
@@ -146,10 +146,10 @@ Key mechanisms:
 
 **Files:** `src/orchestrator/graph.py`, `src/orchestrator/state.py`
 
-> **Полная спецификация шагов, переходов, stop conditions, retry** →
+> **Full specification of steps, transitions, stop conditions, retry** →
 > [docs/specs/agent-orchestrator.md](specs/agent-orchestrator.md)
 >
-> **Workflow-диаграмма с ветками ошибок** →
+> **Workflow diagram with error branches** →
 > [docs/diagrams/workflow.md](diagrams/workflow.md)
 
 ```mermaid
@@ -173,7 +173,7 @@ stateDiagram-v2
 
 ## 6. Inference Clients
 
-> **Полные контракты, errors, timeouts, side effects** →
+> **Full contracts, errors, timeouts, side effects** →
 > [docs/specs/tools-apis.md](specs/tools-apis.md)
 
 | Client | Model | Protocol | Used by |
@@ -220,5 +220,5 @@ stateDiagram-v2
 └── Result: 2 iterations, WER=0.0, 2/2 approved
 ```
 
-> **Полный sequence diagram** → [docs/diagrams/workflow.md](diagrams/workflow.md)
-> **Data flow и lifecycle** → [docs/diagrams/data-flow.md](diagrams/data-flow.md)
+> **Full sequence diagram** → [docs/diagrams/workflow.md](diagrams/workflow.md)
+> **Data flow and lifecycle** → [docs/diagrams/data-flow.md](diagrams/data-flow.md)

@@ -1,6 +1,6 @@
 # Data Flow Diagram — ReflexTTS
 
-> Как данные проходят через систему, что хранится, что логируется.
+> How data flows through the system, what is stored, what is logged.
 
 ## End-to-End Data Flow
 
@@ -106,37 +106,36 @@ flowchart TB
 
 ## Data Storage & Lifecycle
 
-### Что хранится
+### What is Stored
 
-| Данные | Где | Время жизни | Формат |
-|--------|-----|------------|--------|
-| `GraphState` | RAM (thread local) | Время выполнения pipeline | Pydantic model → dict |
-| `SessionState` | In-memory dict (PoC) | До перезапуска сервера | Python dataclass |
-| `audio_bytes` | `SessionState.audio_bytes` | До GC / перезапуска | WAV bytes |
-| `segment_audio[]` | `GraphState` (RAM) | Время выполнения pipeline | WAV bytes per segment |
-| `agent_log[]` | `SessionState` + WebSocket | До перезапуска / export | list[dict] |
-| Prometheus metrics | `MetricsRegistry` (RAM) | До перезапуска | Counter/Gauge/Histogram |
+| Data | Where | Lifetime | Format |
+|------|-------|----------|--------|
+| `GraphState` | RAM (thread local) | Pipeline execution time | Pydantic model → dict |
+| `SessionState` | In-memory dict / Redis (`REDIS_USE_REDIS`) | In-memory: until restart. Redis: TTL 1h | Python dataclass |
+| `audio_bytes` | `SessionState.audio_bytes` | Until GC / restart | WAV bytes |
+| `segment_audio[]` | `GraphState` (RAM) | Pipeline execution time | WAV bytes per segment |
+| `agent_log[]` | `SessionState` + WebSocket | Until restart / export | list[dict] |
+| Prometheus metrics | `MetricsRegistry` (RAM) | Until restart | Counter/Gauge/Histogram |
 
-### Что логируется
+### What is Logged
 
-| Уровень | Что | PII | Пример |
-|---------|-----|-----|--------|
-| INFO | Agent actions | ❌ Нет | `director_done segments=3 instruct="Speak with happy tone"` |
-| INFO | Pipeline lifecycle | ❌ Нет | `pipeline_completed wer=0.0 iterations=2 audio_size_kb=150` |
-| WARNING | Errors, retries | ❌ Нет | `injection_detected patterns=["role_override"]` |
-| WARNING | Routing decisions | ❌ Нет | `route_editor iteration=1 failed_segments=[1,3]` |
-| ERROR | Failures | ❌ Нет | `pipeline_failed error="VLLMConnectionError"` |
-| ⚠️ INFO | Director input text | ✅ **Да** | `director_input_text text="..."` — **должно быть убрано** |
-| DEBUG | Raw LLM responses | Возможно | `vllm_raw_response raw_preview=...` |
+| Level | What | PII | Example |
+|-------|------|-----|---------|
+| INFO | Agent actions | ❌ No | `director_done segments=3 instruct="Speak with happy tone"` |
+| INFO | Pipeline lifecycle | ❌ No | `pipeline_completed wer=0.0 iterations=2 audio_size_kb=150` |
+| WARNING | Errors, retries | ❌ No | `injection_detected patterns=["role_override"]` |
+| WARNING | Routing decisions | ❌ No | `route_editor iteration=1 failed_segments=[1,3]` |
+| ERROR | Failures | ❌ No | `pipeline_failed error="VLLMConnectionError"` |
+| DEBUG | Director input length | ❌ No | `director_input_text text_length=142` |
+| DEBUG | Raw LLM responses | Possible | `vllm_raw_response raw_preview=...` |
 
-> **Known issue**: `director_input_text` логирует сырой текст пользователя. Необходимо убрать или маскировать.
+> ✅ **PII leak fixed**: `director_input_text` now logs only `text_length`, not raw text.
 
-### Что НЕ хранится
+### What is NOT Stored
 
-- ❌ Промежуточные отклонённые аудио (overwritten при retry)
-- ❌ Полные LLM промпты после выполнения
-- ❌ Embedding'и аудио/текста (нет retrieval layer)
-- ❌ Данные между сессиями (нет persistent storage в PoC)
+- ❌ Intermediate rejected audio (overwritten on retry)
+- ❌ Full LLM prompts after execution
+- ❌ Audio/text embeddings (no retrieval layer)
 
 ## Data Transformation Pipeline
 

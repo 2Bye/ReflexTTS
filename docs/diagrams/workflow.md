@@ -1,6 +1,6 @@
 # Workflow / Graph Diagram — ReflexTTS
 
-> Пошаговое выполнение запроса, включая ветки ошибок.
+> Step-by-step request execution, including error branches.
 
 ## Main Pipeline Flow
 
@@ -21,9 +21,8 @@ stateDiagram-v2
     Reject400 --> [*]: HTTP 400
 
     state PipelineThread {
-        [*] --> AcquireSemaphore
-        AcquireSemaphore --> Director: Semaphore(1) acquired
-        AcquireSemaphore --> Reject503: busy
+        [*] --> EnqueuePipeline
+        EnqueuePipeline --> Director: worker dequeues session
 
         state Director {
             [*] --> BuildPrompt
@@ -106,16 +105,14 @@ stateDiagram-v2
 
         Editor --> Critic: re-evaluate repaired audio
 
-        PipelineEnd --> ReleaseSemaphore
+        PipelineEnd --> [*]
     }
-
-    Reject503 --> [*]: HTTP 503
 
     PipelineThread --> UpdateSession: status=completed/failed
     UpdateSession --> [*]: audio available via GET /session/{id}/audio
 ```
 
-## Error Branches (подробно)
+## Error Branches (detailed)
 
 ```mermaid
 flowchart TD

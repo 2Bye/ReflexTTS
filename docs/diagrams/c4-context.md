@@ -1,43 +1,43 @@
 # C4 Context Diagram — ReflexTTS
 
-> Уровень 1: система, пользователь, внешние сервисы и границы.
+> Level 1: system, user, external services, and boundaries.
 
 ```mermaid
 C4Context
     title ReflexTTS — System Context Diagram
 
-    Person(user, "User / Client", "Отправляет текст для синтеза, получает аудио WAV")
+    Person(user, "User / Client", "Sends text for synthesis, receives WAV audio")
 
-    System(reflexTTS, "ReflexTTS", "Self-correcting TTS pipeline с 4 агентами (Director → Actor → Critic → Editor). Локальный GPU inference.")
+    System(reflexTTS, "ReflexTTS", "Self-correcting TTS pipeline with 4 agents (Director → Actor → Critic → Editor). Local GPU inference.")
 
-    System_Ext(browser, "Web Browser", "Встроенный Web UI для интерактивного синтеза")
+    System_Ext(browser, "Web Browser", "Embedded Web UI for interactive synthesis")
 
-    System_Ext(monitoring, "Prometheus / Grafana", "Сбор метрик: latency, WER, iterations, errors")
+    System_Ext(monitoring, "Prometheus / Grafana", "Metrics collection: latency, WER, iterations, errors")
 
     Rel(user, reflexTTS, "REST API / WebSocket", "POST /synthesize, GET /session, WS /ws")
     Rel(browser, reflexTTS, "HTTP + WebSocket", "Web UI, real-time agent log")
     Rel(reflexTTS, monitoring, "HTTP /metrics", "Prometheus exposition format")
 ```
 
-## Текстовое описание
+## Description
 
-### Акторы
+### Actors
 
-| Актор | Описание |
-|-------|----------|
-| **User / Client** | Человек или программа, отправляющая текст через REST API или Web UI |
-| **Web Browser** | Встроенный UI (HTML/JS/CSS) для интерактивного доступа |
-| **Prometheus / Grafana** | Внешний мониторинг, скрейпит `/metrics` |
+| Actor | Description |
+|-------|-------------|
+| **User / Client** | Human or application sending text via REST API or Web UI |
+| **Web Browser** | Embedded UI (HTML/JS/CSS) for interactive access |
+| **Prometheus / Grafana** | External monitoring, scrapes `/metrics` |
 
-### Система
+### System
 
 **ReflexTTS** — self-correcting text-to-speech pipeline:
-- Принимает текст + voice_id
-- Проводит через 4 агента (Director → Actor → Critic → Editor)
-- Итеративно исправляет ошибки произношения
-- Возвращает WAV аудио с WER ≈ 0
+- Accepts text + voice_id
+- Processes through 4 agents (Director → Actor → Critic → Editor)
+- Iteratively corrects pronunciation errors
+- Returns WAV audio with WER ≈ 0
 
-### Границы
+### Boundaries
 
 ```
 ┌─────────────────────────────────────────────┐
@@ -54,14 +54,14 @@ C4Context
 │  │  └──────────────────────────────────┘ │  │
 │  └────────────────────────────────────────┘  │
 │                                              │
-│  ⛔ Нет внешних облачных API                 │
-│  ⛔ Нет исходящих запросов с PII             │
-│  ✅ Все данные остаются внутри trust boundary│
+│  ⛔ No external cloud APIs                   │
+│  ⛔ No outgoing requests with PII            │
+│  ✅ All data stays within trust boundary     │
 └─────────────────────────────────────────────┘
 ```
 
-### Ключевые свойства
+### Key Properties
 
-- **Полностью локальная система** — нет зависимостей от облачных LLM/TTS/ASR API
-- **Единственный внешний интерфейс** — Prometheus scraping (read-only, no PII)
-- **PII boundary** — маскировка происходит до входа в pipeline
+- **Fully local system** — no dependencies on cloud LLM/TTS/ASR APIs
+- **Only external interface** — Prometheus scraping (read-only, no PII)
+- **PII boundary** — masking occurs before entering the pipeline

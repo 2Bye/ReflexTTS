@@ -1,23 +1,23 @@
 # Spec: Serving / Config
 
-> Запуск, конфигурация, секреты, версии моделей.
+> Deployment, configuration, secrets, model versions.
 
 ---
 
-## 1. Запуск
+## 1. Deployment
 
 ### Local (dev)
 
 ```bash
-# Установка
+# Install
 pip install -e ".[dev]"
 
-# Проверки
+# Checks
 ruff check src/ tests/
 python -m mypy src/
 python -m pytest tests/unit/ -v
 
-# Запуск API (без GPU)
+# Run API (no GPU)
 python -m uvicorn src.api.app:create_app --factory --port 8080
 ```
 
@@ -26,7 +26,7 @@ python -m uvicorn src.api.app:create_app --factory --port 8080
 ```bash
 cd docker && docker compose up -d
 
-# Сервисы:
+# Services:
 # vLLM:      :8055 (GPU 1)
 # CosyVoice: :9880 (GPU 2)
 # WhisperX:  :9881 (GPU 2)
@@ -36,8 +36,8 @@ cd docker && docker compose up -d
 
 ### Healthchecks
 
-| Сервис | Endpoint | Interval | Timeout | Start period |
-|--------|----------|----------|---------|-------------|
+| Service | Endpoint | Interval | Timeout | Start period |
+|---------|----------|----------|---------|-------------|
 | vLLM | `GET :8055/health` | 30s | 10s | 120s |
 | CosyVoice | `GET :9880/health` | 30s | 10s | 300s |
 | WhisperX | `GET :9881/health` | 30s | 10s | 180s |
@@ -46,12 +46,12 @@ cd docker && docker compose up -d
 
 ---
 
-## 2. Конфигурация
+## 2. Configuration
 
-Вся конфигурация через **environment variables** + Pydantic Settings.
-**Файл:** `src/config.py`
+All configuration via **environment variables** + Pydantic Settings.
+**File:** `src/config.py`
 
-### Иерархия конфигурации
+### Configuration Hierarchy
 
 ```
 Priority (high → low):
@@ -60,7 +60,7 @@ Priority (high → low):
   3. Code defaults (Pydantic Field default)
 ```
 
-### Полная таблица
+### Full Table
 
 | Prefix | Variable | Default | Description |
 |--------|----------|---------|-------------|
@@ -99,22 +99,22 @@ Priority (high → low):
 
 ---
 
-## 3. Секреты
+## 3. Secrets
 
-| Секрет | Хранение | Описание |
-|--------|---------|----------|
-| `VLLM_API_KEY` | `.env` / env var | `"not-needed"` для локального vLLM |
-| `REDIS_URL` | `.env` / env var | Connection string с паролем (если есть) |
-| Нет облачных API ключей | — | Полностью self-hosted |
+| Secret | Storage | Description |
+|--------|---------|-------------|
+| `VLLM_API_KEY` | `.env` / env var | `"not-needed"` for local vLLM |
+| `REDIS_URL` | `.env` / env var | Connection string with password (if any) |
+| No cloud API keys | — | Fully self-hosted |
 
-> **Важно**: `.env.example` содержит только шаблоны. Реальные `.env` файлы в `.gitignore`.
+> **Important**: `.env.example` contains only templates. Real `.env` files are in `.gitignore`.
 
 ---
 
-## 4. Версии моделей
+## 4. Model Versions
 
-| Модель | Версия | Source | Quantization | VRAM |
-|--------|--------|--------|-------------|------|
+| Model | Version | Source | Quantization | VRAM |
+|-------|---------|--------|-------------|------|
 | **Qwen3-8B-Instruct** | AWQ 4-bit | `Qwen/Qwen3-8B-AWQ` | AWQ Marlin | ~5 GB |
 | **CosyVoice3** | 0.5B | `FunAudioLLM/Fun-CosyVoice3-0.5B-2512` | FP16 | ~2 GB |
 | **WhisperX** | large-v3 | `openai/whisper-large-v3` + Wav2Vec2 | FP16 | ~3 GB |
@@ -156,6 +156,6 @@ Priority (high → low):
     │                           └────────────────┘   │:8056    │ │
     │                                                 └─────────┘ │
     │                                                              │
-    │   network_mode: host (все сервисы)                          │
+    │   network_mode: host (all services)                         │
     └─────────────────────────────────────────────────────────────┘
 ```

@@ -1,12 +1,12 @@
 # Spec: Agent / Orchestrator
 
-> Шаги, правила переходов, stop conditions, retry/fallback.
+> Steps, transition rules, stop conditions, retry/fallback.
 
 ---
 
 ## 1. LangGraph Orchestrator
 
-**Файлы:** `src/orchestrator/graph.py`, `src/orchestrator/state.py`
+**Files:** `src/orchestrator/graph.py`, `src/orchestrator/state.py`
 
 ### Graph Structure
 
@@ -24,31 +24,31 @@ Edges:
 
 ### Node Lifecycle
 
-Каждый узел:
-1. Получает `state: dict[str, Any]`
-2. Десериализует: `gs = GraphState.model_validate(state)`
-3. Выполняет бизнес-логику (async)
-4. Сериализует: `return gs.model_dump()`
-5. LangGraph обновляет state и переходит к следующему узлу
+Each node:
+1. Receives `state: dict[str, Any]`
+2. Deserializes: `gs = GraphState.model_validate(state)`
+3. Executes business logic (async)
+4. Serializes: `return gs.model_dump()`
+5. LangGraph updates state and transitions to the next node
 
 ---
 
-## 2. Шаги Pipeline
+## 2. Pipeline Steps
 
 ### Step 1: Director
 
-| Параметр | Значение |
-|----------|---------|
-| **Input** | `state.text`, `state.voice_id`, `state.errors` (если iteration > 0) |
+| Parameter | Value |
+|-----------|-------|
+| **Input** | `state.text`, `state.voice_id`, `state.errors` (if iteration > 0) |
 | **Action** | `vllm.chat_json(DIRECTOR_PROMPT, text)` → `DirectorOutput` |
 | **Output** | `state.ssml_markup`, `state.tts_instruct` |
-| **Side action** | `_apply_hotfix_hints()` если iteration > 0; `_apply_cached_hints()` из `PronunciationCache` |
+| **Side action** | `_apply_hotfix_hints()` if iteration > 0; `_apply_cached_hints()` from `PronunciationCache` |
 | **Duration** | 2-15s |
 
 ### Step 2: Actor
 
-| Параметр | Значение |
-|----------|---------|
+| Parameter | Value |
+|-----------|-------|
 | **Input** | `state.ssml_markup.segments[]`, `state.segment_approved[]` |
 | **Action** | ∀ unapproved segment: check `SegmentCache` → `tts.synthesize()` via `asyncio.gather(Semaphore(4))` |
 | **Output** | `state.audio_bytes`, `state.segment_audio[]`, `state.sample_rate` |
@@ -57,19 +57,19 @@ Edges:
 
 ### Step 3: Critic
 
-| Параметр | Значение |
-|----------|---------|
+| Parameter | Value |
+|-----------|-------|
 | **Input** | `state.segment_audio[]`, `state.ssml_markup.segments[]` |
 | **Action 1** | ∀ unapproved segment: `asr.transcribe(segment_wav)` |
 | **Action 2** | ∀ unapproved segment: `vllm.chat_json(JUDGE_PROMPT, {target, transcript})` |
 | **Output** | `state.errors[]`, `state.wer`, `state.is_approved`, `state.segment_approved[]` |
-| **Post-action** | `state.iteration += 1`; запись результатов в `PronunciationCache` |
+| **Post-action** | `state.iteration += 1`; record results to `PronunciationCache` |
 | **Duration** | 3-15s per unapproved segment |
 
 ### Step 4: Editor (conditional)
 
-| Параметр | Значение |
-|----------|---------|
+| Parameter | Value |
+|-----------|-------|
 | **Input** | `state.errors[]`, `state.segment_approved[]`, `state.segment_audio[]` |
 | **Action** | ∀ failed segment: `tts.synthesize(full_segment_text)` |
 | **Output** | Updated `state.segment_audio[]`, rebuilt `state.audio_bytes`, `state.convergence_score` |
@@ -78,15 +78,15 @@ Edges:
 
 ### Step 5: Mark Human Review (conditional)
 
-| Параметр | Значение |
-|----------|---------|
+| Parameter | Value |
+|-----------|-------|
 | **Input** | `state` (after max retries) |
 | **Action** | Set `state.needs_human_review = True` |
 | **Output** | → END |
 
 ---
 
-## 3. Правила переходов (Routing)
+## 3. Routing Rules
 
 ### `route_after_critic(state) → str`
 
@@ -152,16 +152,16 @@ def route_after_critic(state):
 
 ## 5. Retry / Fallback Strategy
 
-### Retry levels
+### Retry Levels
 
-| Level | Механизм | Max attempts | Backoff |
+| Level | Mechanism | Max attempts | Backoff |
 |-------|----------|-------------|---------|
 | **L1: vLLM connection** | `_request_with_retry()` | 5 | Exponential: 2^n sec |
 | **L2: JSON parsing** | strip → parse → brace extract | 3 steps | No wait |
 | **L3: Pipeline iteration** | Critic → Director/Editor loop | max_retries (5) | No wait |
 | **L4: Pipeline timeout** | `asyncio.wait_for()` | 1 (hard timeout) | — |
 
-### Fallback chain
+### Fallback Chain
 
 ```
 1. JSON parse fail → strip <think> → brace extraction → VLLMResponseError
@@ -176,8 +176,8 @@ def route_after_critic(state):
 
 ## 6. Per-Agent Error Handling
 
-| Agent | Ошибка | Действие |
-|-------|--------|----------|
+| Agent | Error | Action |
+|-------|-------|--------|
 | Director | vLLM timeout | 5× retry → pipeline fail |
 | Director | Invalid JSON | Brace extraction fallback |
 | Director | Unknown emotion | Auto-map to "neutral" |
