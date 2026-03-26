@@ -15,6 +15,7 @@ from io import BytesIO
 import numpy as np
 
 from src.agents.schemas import DirectorOutput, Segment
+from src.agents.segment_cache import SegmentCache
 from src.inference.tts_client import TTSClient
 from src.log import get_logger
 from src.orchestrator.state import GraphState
@@ -26,6 +27,7 @@ async def run_actor(
     state: GraphState,
     tts: TTSClient,
     max_concurrency: int = 4,
+    segment_cache: SegmentCache | None = None,
 ) -> GraphState:
     """Execute the Actor Agent with parallel segment synthesis.
 
@@ -37,6 +39,7 @@ async def run_actor(
         state: Current graph state with DirectorOutput in ssml_markup.
         tts: CosyVoice3 TTS client.
         max_concurrency: Max concurrent TTS requests (GPU semaphore).
+        segment_cache: Optional cross-session segment audio cache.
 
     Returns:
         Updated state with audio_bytes and segment_audio.
@@ -107,7 +110,29 @@ async def run_actor(
                 text=segment.text[:50],
             )
         else:
-            tasks.append(asyncio.create_task(_synth_segment(i, segment)))
+            # Check cross-session segment cache before synthesis
+            emotion_val = segment.emotion.value
+            if segment_cache:
+                cached_audio = await segment_cache.get(
+                    text=segment.text,
+                    voice_id=voice_id,
+                    emotion=emotion_val,
+                )
+                if cached_audio:
+                    state.segment_audio[i] = cached_audio
+                    cached_indices.add(i)
+                    logger.info(
+                        "actor_segment_cache_hit",
+                        segment_index=i,
+                        text=segment.text[:50],
+                    )
+                    continue
+
+            tasks.append(
+                asyncio.create_task(
+                    _synth_segment(i, segment)
+                )
+            )
 
     # Run all synthesis tasks in parallel
     synth_results: dict[int, np.ndarray] = {}

@@ -32,10 +32,13 @@
 |---------|-------------|
 | **FastAPI** (async, WebSocket) | Async pipeline + real-time streaming логов; встроенный Web UI |
 | **Pipeline в отдельном thread** с собственным event loop | Изоляция от uvicorn event loop; предотвращение deadlock |
-| **Semaphore(1)** для pipeline | GPU-bound: одновременно 1 pipeline; предотвращение OOM |
+| **Queue + Worker thread** для pipeline | GPU-bound: запросы стоят в очереди, обрабатываются последовательно |
 | **Semaphore(4)** для TTS-сегментов | Параллельный синтез до 4 сегментов внутри 1 pipeline |
-| **Redis** для session state (planned) | TTL-based session management; масштабирование в production |
-| **In-memory session store** (PoC) | Быстрый старт без внешних зависимостей |
+| **Rate Limiter** | Sliding-window per-IP, 10 req/min (configurable) |
+| **Redis session store** (optional) | TTL-based session management; `REDIS_USE_REDIS=true` |
+| **In-memory session store** (default) | Быстрый старт без внешних зависимостей |
+| **Pronunciation cache** | Cross-session кэш phoneme hints (word+voice → hint) |
+| **Segment audio cache** | Cross-session кэш аудио (SHA-256 keyed, WER=0 only) |
 
 ---
 
@@ -110,8 +113,9 @@
 | **ModelRegistry** | `inference/model_registry.py` | Lifecycle: init → health → shutdown | все клиенты |
 | **Audio Utils** | `audio/*.py` | Alignment, masking, crossfade, convergence | numpy |
 | **Security** | `security/*.py` | Sanitization, PII, voice whitelist | regex |
-| **API** | `api/app.py`, `api/schemas.py`, `api/sessions.py` | REST + WebSocket + Web UI | FastAPI |
-| **Monitoring** | `monitoring/__init__.py` | Counter, Gauge, Histogram → Prometheus | — |
+| **API** | `api/app.py`, `api/schemas.py`, `api/sessions.py`, `api/rate_limiter.py`, `api/redis_store.py` | REST + WebSocket + Web UI + rate limiting | FastAPI |
+| **Monitoring** | `monitoring/__init__.py`, `monitoring/tracing.py` | Prometheus metrics + OpenTelemetry tracing | opentelemetry-sdk |
+| **Caches** | `agents/pronunciation_cache.py`, `agents/segment_cache.py` | Cross-session hint + audio caches | — |
 | **Config** | `config.py` | Pydantic Settings из env | pydantic-settings |
 | **Logging** | `log.py` | structlog: JSON (prod) / console (dev) | structlog |
 
@@ -127,8 +131,9 @@ POST /synthesize { text, voice_id }
   ├── 1. Input Sanitization     → 10 regex patterns, max_length=5000
   ├── 2. PII Masking             → email, phone, card, passport → [MASK]
   ├── 3. Voice Validation        → whitelist check (3 speakers)
-  ├── 4. Session Creation        → UUID, state=queued → processing
-  ├── 5. Pipeline Launch         → threading.Thread + own event loop
+  ├── 4. Rate Limiting           → sliding-window per-IP, 429 if exceeded
+  ├── 5. Session Creation        → UUID, state=queued
+  ├── 6. Enqueue pipeline        → queue.Queue + daemon worker thread
   │     │
   │     ▼
   │   ┌──────────────────────────────────────────────────┐
@@ -209,11 +214,12 @@ POST /synthesize { text, voice_id }
 
 | Аспект | Реализация | Ограничение |
 |--------|-----------|-------------|
-| **Session memory** | In-memory `SessionStore` (dict) | Теряется при перезапуске; PoC only |
-| **Cross-session** | Нет | Каждый запрос обрабатывается с нуля |
+| **Session memory** | In-memory `SessionStore` (default) или `RedisSessionStore` (`REDIS_USE_REDIS=true`) | Redis: TTL 1h, survives restart |
+| **Cross-session pronunciation** | `PronunciationCache` — word+voice → phoneme hint | ✅ In-memory, threshold=2 successes |
+| **Cross-session audio** | `SegmentCache` — SHA-256(text+voice+emotion) → WAV | ✅ In-memory, TTL 24h, WER=0 only |
 | **Agent memory** | Нет persistent memory | Агенты stateless между запросами |
 | **Ephemeral data** | WAV, промежуточные результаты — в RAM | Удаляется после завершения сессии |
-| **Логирование** | Только анонимизированные метаданные | PII не пишутся в логи (planned) |
+| **Логирование** | Только анонимизированные метаданные | ✅ PII удалён из логов |
 
 ### 4.3 Context budget
 
@@ -241,10 +247,10 @@ POST /synthesize { text, voice_id }
 | Механизм | Описание | Статус |
 |----------|----------|--------|
 | **Phoneme hint lookup** | Director может использовать `phoneme_hints` из предыдущих ошибок Critic | ✅ Реализовано (intra-session) |
-| **Segment cache** | Actor переиспользует `segment_audio[i]` если `segment_approved[i]=True` | ✅ Реализовано (intra-session) |
+| **Segment cache (intra)** | Actor переиспользует `segment_audio[i]` если `segment_approved[i]=True` | ✅ Реализовано (intra-session) |
 | **Voice lookup** | `VOICE_MAP` в TTSClient для маппинга `voice_id → speaker name` | ✅ Реализовано |
-| **Pronunciation memory** | Cross-session кэш (word, voice) → phoneme_hint | 🟡 Planned (MAS-4) |
-| **Segment embedding cache** | hash(text + voice + emotion) → audio + WER | 🟡 Planned (MAS-4) |
+| **Pronunciation memory** | Cross-session кэш (word, voice) → phoneme_hint, threshold=2 successes | ✅ Реализовано (`pronunciation_cache.py`) |
+| **Segment audio cache** | SHA-256(text + voice + emotion) → WAV bytes, TTL 24h, WER=0 only | ✅ Реализовано (`segment_cache.py`) |
 
 ### 5.3 Планируемый retrieval-контур (MAS-4)
 
@@ -324,7 +330,8 @@ POST /synthesize { text, voice_id }
 |-----------|-----------|-------------|
 | **Text length** | `max_length=5000` в sanitizer | `SECURITY_MAX_TEXT_LENGTH` |
 | **Retry limit** | `max_retries=5` | `SECURITY_MAX_RETRIES` |
-| **Pipeline concurrency** | `threading.Semaphore(1)` | Hardcoded |
+| **Pipeline concurrency** | `queue.Queue` + single worker thread | Sequential processing |
+| **Rate limiting** | Sliding-window per-IP, 10 req/min | `API_RATE_LIMIT_PER_MINUTE` |
 | **TTS concurrency** | `asyncio.Semaphore(4)` | `max_concurrency` param |
 | **Pipeline timeout** | `asyncio.wait_for(300s)` | Hardcoded |
 | **Voice whitelist** | 3 speakers | `SECURITY_WHITELISTED_VOICES` |
@@ -398,7 +405,7 @@ Critic not approved
 |----------|---------|-----------|
 | Max text length | 5000 chars | `SECURITY_MAX_TEXT_LENGTH` |
 | Max retries | 5 | `SECURITY_MAX_RETRIES` |
-| Max concurrent pipelines | 1 | `Semaphore(1)` |
+| Max concurrent pipelines | 1 (queued) | `queue.Queue` + worker |
 | Max concurrent TTS segments | 4 | `Semaphore(4)` |
 | Pipeline hard timeout | 300s | Hardcoded |
 | Session TTL | 1h | `REDIS_SESSION_TTL_SECONDS` |

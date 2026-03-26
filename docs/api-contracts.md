@@ -144,6 +144,9 @@ print(data)
 }
 ```
 
+> [!NOTE]
+> When the pipeline is busy, requests are **queued** (not rejected). The `status` field will be `"queued"` with a `message` like `"Position 2 in queue"`.
+
 #### Internal Pipeline
 
 ```
@@ -152,9 +155,10 @@ POST /synthesize
 1. Input sanitization    → reject prompt injection
 2. PII masking           → [EMAIL_1], [PHONE_1]
 3. Voice validation      → whitelist check
-4. Session create        → UUID
-5. Background pipeline   → Director → Actor → Critic → [Editor/Hotfix]
-6. Response 202          → { session_id }
+4. Rate limiting          → 429 if exceeded (10 req/min per IP)
+5. Session create        → UUID
+6. Enqueue pipeline      → queue.Queue + background worker
+7. Response 202          → { session_id }
 ```
 
 ---
@@ -203,6 +207,7 @@ print(status)
 | `needs_human_review` | `bool` | Whether manual review is required |
 | `agent_log` | `list[dict]` | Agent action log |
 | `error_message` | `str \| null` | Error description (if `status=failed`) |
+| `queue_position` | `int \| null` | Position in pipeline queue (null if not queued) |
 
 ---
 
@@ -538,6 +543,7 @@ class SessionStatus(BaseModel):
     needs_human_review: bool = False
     agent_log: list[dict[str, str]] = []
     error_message: str | None = None
+    queue_position: int | None = None
 ```
 
 ### ErrorResponse
@@ -570,7 +576,7 @@ stateDiagram-v2
 | `400` | Invalid request, prompt injection, disallowed voice | `"Potential prompt injection detected"` |
 | `404` | Session not found | `"Session not found"` |
 | `409` | Audio not ready yet | `"Audio not ready, status: processing"` |
-| `503` | Pipeline busy (GPU) | `"Pipeline busy — another synthesis is in progress"` |
+| `429` | Rate limit exceeded (10 req/min per IP) | `"Rate limit exceeded. Try again later."` |
 
 ### Error Handling in Python
 
@@ -606,6 +612,12 @@ Key environment variables that affect the API:
 | `SECURITY_WHITELISTED_VOICES` | `["speaker_1", "speaker_2", "speaker_3"]` | Allowed voices |
 | `SECURITY_ENABLE_PII_MASKING` | `true` | PII masking |
 | `SECURITY_ENABLE_INPUT_SANITIZATION` | `true` | Prompt injection protection |
+| `API_RATE_LIMIT_PER_MINUTE` | `10` | Per-IP rate limit |
+| `REDIS_USE_REDIS` | `false` | Use Redis for session store |
+| `REDIS_URL` | `redis://localhost:6379/0` | Redis connection string |
+| `REDIS_SESSION_TTL_SECONDS` | `3600` | Redis session TTL |
+| `LOG_ENABLE_OTEL` | `false` | Enable OpenTelemetry tracing |
+| `LOG_OTEL_ENDPOINT` | `http://localhost:4317` | OTel collector endpoint |
 
 ### Running the Server
 

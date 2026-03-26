@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from src.api.app import _pipeline_semaphore, create_app
+from src.api.app import _pipeline_queue, create_app
 from src.api.schemas import SynthesizeRequest
 from src.api.sessions import SessionState, SessionStore
 from src.config import AppConfig
@@ -15,10 +15,9 @@ from src.config import AppConfig
 def client() -> TestClient:
     config = AppConfig()
     app = create_app(config)
-    # Reset pipeline semaphore to prevent cross-test blocking
-    while not _pipeline_semaphore.acquire(blocking=False):
-        pass
-    _pipeline_semaphore.release()
+    # Clear pipeline queue between tests
+    while not _pipeline_queue.empty():
+        _pipeline_queue.get_nowait()
     return TestClient(app)
 
 
@@ -45,7 +44,7 @@ class TestSynthesize:
         assert res.status_code == 202
         data = res.json()
         assert "session_id" in data
-        assert data["status"] == "processing"
+        assert data["status"] in ("processing", "queued")
 
     def test_synthesize_empty_text(self, client: TestClient) -> None:
         res = client.post("/synthesize", json={"text": "", "voice_id": "speaker_1"})

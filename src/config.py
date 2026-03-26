@@ -83,6 +83,7 @@ class RedisConfig(BaseSettings):
 
     url: str = "redis://localhost:6379/0"
     session_ttl_seconds: int = 3600  # 1 hour
+    use_redis: bool = False  # Set to True to use Redis-backed session store
 
 
 class LoggingConfig(BaseSettings):

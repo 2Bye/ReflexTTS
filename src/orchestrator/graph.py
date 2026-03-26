@@ -17,6 +17,8 @@ from src.agents.actor import run_actor
 from src.agents.critic import run_critic
 from src.agents.director import run_director
 from src.agents.editor import run_editor
+from src.agents.pronunciation_cache import PronunciationCache
+from src.agents.segment_cache import SegmentCache
 from src.inference.asr_client import ASRClient
 from src.inference.tts_client import TTSClient
 from src.inference.vllm_client import VLLMClient
@@ -31,6 +33,8 @@ def build_graph(
     tts: TTSClient,
     asr: ASRClient,
     max_retries: int = 3,
+    pronunciation_cache: PronunciationCache | None = None,
+    segment_cache: SegmentCache | None = None,
 ) -> StateGraph:  # type: ignore[type-arg]
     """Build the LangGraph state machine for the ReflexTTS pipeline.
 
@@ -46,6 +50,8 @@ def build_graph(
         tts: CosyVoice3 TTS client.
         asr: WhisperX ASR client.
         max_retries: Maximum correction loops.
+        pronunciation_cache: Optional cross-session pronunciation cache.
+        segment_cache: Optional cross-session segment audio cache.
 
     Returns:
         Compiled LangGraph StateGraph.
@@ -55,17 +61,17 @@ def build_graph(
 
     async def director_node(state: dict[str, Any]) -> dict[str, Any]:
         gs = GraphState.model_validate(state)
-        gs = await run_director(gs, vllm)
+        gs = await run_director(gs, vllm, pronunciation_cache=pronunciation_cache)
         return gs.model_dump()
 
     async def actor_node(state: dict[str, Any]) -> dict[str, Any]:
         gs = GraphState.model_validate(state)
-        gs = await run_actor(gs, tts)
+        gs = await run_actor(gs, tts, segment_cache=segment_cache)
         return gs.model_dump()
 
     async def critic_node(state: dict[str, Any]) -> dict[str, Any]:
         gs = GraphState.model_validate(state)
-        gs = await run_critic(gs, asr, vllm)
+        gs = await run_critic(gs, asr, vllm, pronunciation_cache=pronunciation_cache)
         gs.iteration += 1
         return gs.model_dump()
 

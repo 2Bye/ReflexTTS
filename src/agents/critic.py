@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 
 from src.agents.actor import _decode_wav_to_array
+from src.agents.pronunciation_cache import PronunciationCache
 from src.agents.prompts import CRITIC_JUDGE_SYSTEM_PROMPT
 from src.agents.schemas import CriticOutput
 from src.inference.asr_client import ASRClient
@@ -26,6 +27,7 @@ async def run_critic(
     state: GraphState,
     asr: ASRClient,
     vllm: VLLMClient,
+    pronunciation_cache: PronunciationCache | None = None,
 ) -> GraphState:
     """Execute the Critic Agent with per-segment evaluation.
 
@@ -39,6 +41,7 @@ async def run_critic(
         state: Current graph state with audio_bytes and segment_audio.
         asr: WhisperX ASR client.
         vllm: vLLM client for the Judge LLM.
+        pronunciation_cache: Optional cross-session pronunciation cache.
 
     Returns:
         Updated state with per-segment evaluation, errors, and approval.
@@ -123,6 +126,13 @@ async def run_critic(
             is_approved=state.is_approved,
             segments_approved=f"{approved_count}/{len(segments)}",
         )
+
+        # Record pronunciation cache results
+        if pronunciation_cache and state.errors:
+            await _record_pronunciation_results(
+                state=state,
+                pronunciation_cache=pronunciation_cache,
+            )
 
     else:
         # Fallback: whole-audio evaluation (single segment or no segment_audio)
@@ -363,3 +373,32 @@ def _extract_target_text(state: GraphState) -> str:
         segments = state.ssml_markup["segments"]
         return " ".join(seg.get("text", "") for seg in segments)
     return state.text
+
+
+async def _record_pronunciation_results(
+    *,
+    state: GraphState,
+    pronunciation_cache: PronunciationCache,
+) -> None:
+    """Record pronunciation hint results into the cross-session cache.
+
+    For errors with hotfix hints: if the segment is now approved after
+    using the hint, record success. Otherwise record failure.
+    """
+    for error in state.errors:
+        if not error.hotfix_hint:
+            continue
+
+        seg_idx = error.segment_index
+        is_approved = (
+            seg_idx >= 0
+            and seg_idx < len(state.segment_approved)
+            and state.segment_approved[seg_idx]
+        )
+
+        await pronunciation_cache.record(
+            word=error.word_expected,
+            voice_id=state.voice_id,
+            hint=error.hotfix_hint,
+            success=is_approved,
+        )

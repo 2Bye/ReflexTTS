@@ -9,8 +9,13 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 from enum import StrEnum
+from typing import TYPE_CHECKING
 
 from src.log import get_logger
+
+if TYPE_CHECKING:
+    from src.api.redis_store import RedisSessionStore
+    from src.config import AppConfig
 
 logger = get_logger(__name__)
 
@@ -40,6 +45,7 @@ class Session:
         agent_log: List of agent actions.
         audio_bytes: Final audio output (WAV).
         error_message: Error details if failed.
+        queue_position: Position in pipeline queue (None if not queued).
     """
 
     session_id: str
@@ -54,6 +60,7 @@ class Session:
     agent_log: list[dict[str, str]] = field(default_factory=list)
     audio_bytes: bytes = b""
     error_message: str | None = None
+    queue_position: int | None = None
 
 
 class SessionStore:
@@ -101,3 +108,33 @@ class SessionStore:
     def count(self) -> int:
         """Number of active sessions."""
         return len(self._sessions)
+
+
+def create_session_store(config: AppConfig | None = None) -> SessionStore | RedisSessionStore:
+    """Factory function to create the appropriate session store.
+
+    If config.redis.use_redis is True and Redis is available, returns
+    a RedisSessionStore. Otherwise falls back to in-memory SessionStore.
+
+    Args:
+        config: Application configuration.
+
+    Returns:
+        Session store instance (in-memory or Redis-backed).
+    """
+    if config and config.redis.use_redis:
+        try:
+            from src.api.redis_store import RedisSessionStore as _RedisStore
+
+            store = _RedisStore(config.redis)
+            logger.info("session_store_backend", backend="redis")
+            return store
+        except Exception as e:
+            logger.warning(
+                "redis_store_fallback",
+                error=str(e),
+                message="Falling back to in-memory session store",
+            )
+
+    logger.info("session_store_backend", backend="in-memory")
+    return SessionStore()

@@ -8,6 +8,8 @@ Flow: User text → Director (Qwen3-8B) → DirectorOutput → Actor
 
 from __future__ import annotations
 
+from src.agents.pronunciation_cache import PronunciationCache
+
 from src.agents.prompts import DIRECTOR_SYSTEM_PROMPT
 from src.agents.schemas import DirectorOutput
 from src.inference.vllm_client import VLLMClient
@@ -17,7 +19,11 @@ from src.orchestrator.state import GraphState
 logger = get_logger(__name__)
 
 
-async def run_director(state: GraphState, vllm: VLLMClient) -> GraphState:
+async def run_director(
+    state: GraphState,
+    vllm: VLLMClient,
+    pronunciation_cache: PronunciationCache | None = None,
+) -> GraphState:
     """Execute the Director Agent.
 
     Analyzes input text and produces structured synthesis instructions.
@@ -25,12 +31,13 @@ async def run_director(state: GraphState, vllm: VLLMClient) -> GraphState:
     Args:
         state: Current graph state with input text.
         vllm: vLLM client for LLM inference.
+        pronunciation_cache: Optional cross-session pronunciation cache.
 
     Returns:
         Updated state with DirectorOutput in ssml_markup.
     """
     logger.info("director_start", text_length=len(state.text), voice=state.voice_id)
-    logger.info("director_input_text", text=state.text)
+    logger.debug("director_input", text_length=len(state.text))
 
     director_output = await vllm.chat_json(
         system_prompt=DIRECTOR_SYSTEM_PROMPT,
@@ -62,6 +69,19 @@ async def run_director(state: GraphState, vllm: VLLMClient) -> GraphState:
     # Apply any phoneme hints from previous hotfix iterations
     if state.iteration > 0 and state.errors:
         director_output = _apply_hotfix_hints(director_output, state)
+
+    # Apply cached pronunciation hints (cross-session learning)
+    if pronunciation_cache:
+        cached_hints = await pronunciation_cache.get_hints_for_text(
+            state.text, state.voice_id
+        )
+        if cached_hints:
+            director_output = _apply_cached_hints(director_output, cached_hints)
+            logger.info(
+                "director_cached_hints_applied",
+                hints_count=len(cached_hints),
+                words=list(cached_hints.keys()),
+            )
 
     # Build instruct string for TTS from the first segment's emotion
     instruct_parts: list[str] = []
@@ -113,4 +133,34 @@ def _apply_hotfix_hints(output: DirectorOutput, state: GraphState) -> DirectorOu
                 )
                 break
 
+    return output
+
+
+def _apply_cached_hints(output: DirectorOutput, hints: dict[str, str]) -> DirectorOutput:
+    """Apply cached pronunciation hints from cross-session memory.
+
+    Proactively injects known-good phoneme hints for difficult words
+    before synthesis, avoiding unnecessary correction iterations.
+    """
+    for word, hint in hints.items():
+        for segment in output.segments:
+            if word in segment.text.lower():
+                # Find the original-case word in the segment
+                import re
+
+                match = re.search(re.escape(word), segment.text, re.IGNORECASE)
+                if match:
+                    original_word = match.group()
+                    segment.text = segment.text.replace(
+                        original_word,
+                        f"{hint}{original_word}",
+                        1,
+                    )
+                    segment.phoneme_hints.append(hint)
+                    logger.debug(
+                        "cached_hint_applied",
+                        word=original_word,
+                        hint=hint,
+                    )
+                    break
     return output

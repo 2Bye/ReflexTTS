@@ -1,0 +1,80 @@
+# ReflexTTS — Prometheus Alerting Rules
+# Requires Prometheus + Alertmanager
+# See: docs/specs/observability-evals.md
+
+groups:
+  - name: reflex-tts-alerts
+    rules:
+      # ── Pipeline Health ──
+
+      - alert: HighFailureRate
+        expr: >
+          rate(reflex_pipeline_status_total{status="failed"}[5m]) /
+          rate(reflex_pipeline_status_total[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High pipeline failure rate (>10%)"
+          description: >
+            More than 10% of pipelines are failing in the last 5 minutes.
+            Check vLLM, CosyVoice, or WhisperX health.
+
+      - alert: HighLatency
+        expr: >
+          histogram_quantile(0.95,
+            rate(reflex_request_latency_seconds_bucket[5m])
+          ) > 120
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "p95 pipeline latency exceeds 120s"
+          description: >
+            The 95th percentile latency has exceeded 120 seconds for 5 minutes.
+            This may indicate GPU saturation or model loading issues.
+
+      # ── Session Health ──
+
+      - alert: StuckSession
+        expr: reflex_active_sessions > 0
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Session stuck in processing for >10 minutes"
+          description: >
+            An active session has been processing for more than 10 minutes.
+            This may indicate a pipeline hang or deadlock.
+
+      # ── Quality Regression ──
+
+      - alert: WERRegression
+        expr: >
+          histogram_quantile(0.50,
+            rate(reflex_wer_distribution_bucket[30m])
+          ) > 0.05
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Median WER exceeds 5% — quality regression"
+          description: >
+            The median Word Error Rate has exceeded 5% over the last 30 minutes.
+            This may indicate a model regression or ASR configuration issue.
+
+      # ── Iteration Budget ──
+
+      - alert: HighIterationCount
+        expr: >
+          histogram_quantile(0.50,
+            rate(reflex_pipeline_iterations_bucket[30m])
+          ) > 2.5
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Median iteration count exceeds 2.5"
+          description: >
+            Pipelines are consistently requiring many correction iterations.
+            Check pronunciation cache effectiveness and Critic thresholds.

@@ -33,6 +33,7 @@ class SessionStatus(BaseModel):
     needs_human_review: bool = False
     agent_log: list[dict[str, str]] = Field(default_factory=list)
     error_message: str | None = None
+    queue_position: int | None = None
 
 
 class ErrorResponse(BaseModel):

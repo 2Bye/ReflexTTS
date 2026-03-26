@@ -85,6 +85,7 @@ Priority (high → low):
 | | `ENABLE_INPUT_SANITIZATION` | `true` | Injection guard |
 | `REDIS_` | `URL` | `redis://localhost:6379/0` | Redis connection |
 | | `SESSION_TTL_SECONDS` | `3600` | Session expiry |
+| | `USE_REDIS` | `false` | Use Redis session store (vs in-memory) |
 | `LOG_` | `LEVEL` | `INFO` | Log level |
 | | `FORMAT` | `json` | `json` / `console` |
 | | `SERVICE_NAME` | `reflex-tts` | structlog service tag |

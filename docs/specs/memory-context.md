@@ -6,9 +6,9 @@
 
 ## 1. Session State
 
-### SessionStore (PoC — In-Memory)
+### SessionStore (In-Memory / Redis)
 
-**Файл:** `src/api/sessions.py`
+**Файлы:** `src/api/sessions.py`, `src/api/redis_store.py`
 
 ```python
 class SessionState(StrEnum):
@@ -30,7 +30,12 @@ class Session:
     audio_bytes: bytes
     agent_log: list[dict]
     error_message: str | None
+    queue_position: int | None       # Position in pipeline queue
 ```
+
+**Backend selection** (`create_session_store(config)`):
+- `REDIS_USE_REDIS=false` (default) → `SessionStore` (in-memory dict)
+- `REDIS_USE_REDIS=true` → `RedisSessionStore` (Redis, TTL-based)
 
 | Операция | API | Complexity |
 |----------|-----|-----------|
@@ -47,7 +52,7 @@ queued ──▶ processing ──▶ completed
                     └──▶ failed
 ```
 
-**TTL**: нет (PoC). Planned: Redis TTL = 3600s (1 час).
+**TTL**: In-memory: нет. Redis: `REDIS_SESSION_TTL_SECONDS` = 3600s (1 час).
 
 ---
 
@@ -86,20 +91,20 @@ Overhead: ~1ms на 1MB state.
 
 | Политика | Реализация |
 |----------|-----------|
-| **No cross-session memory** | Каждый запрос — с нуля |
+| **No cross-session memory** | → Заменено на `PronunciationCache` + `SegmentCache` |
 | **Intra-session only** | `GraphState` хранит всё состояние между итерациями |
-| **No eviction** | Сессии в памяти до перезапуска |
-| **No persistence** | При падении — данные потеряны |
-| **No deduplication** | Одинаковые запросы — полный пересинтез |
+| **Eviction** | In-memory: нет. Redis: TTL. Caches: LRU |
+| **Persistence** | In-memory: нет. Redis: да |
+| **Deduplication** | `SegmentCache`: SHA-256(text+voice+emotion), WER=0 only |
 
 ### Планируемая (MAS-4)
 
 | Память | Тип | Storage | Eviction |
 |--------|-----|---------|----------|
-| **Pronunciation memory** | Long-term | Redis hash | LRU, max 10K |
-| **Segment cache** | Long-term | Redis binary | TTL 24h, max 1GB |
-| **Repair log** | Long-term | SQLite | FIFO, max 100K |
-| **Session state** | Short-term | Redis | TTL 1h |
+| **Pronunciation memory** | Long-term | In-memory (Redis planned) | LRU, max 10K | ✅ `pronunciation_cache.py` |
+| **Segment cache** | Long-term | In-memory (Redis planned) | TTL 24h, LRU 1K | ✅ `segment_cache.py` |
+| **Repair log** | Long-term | SQLite | FIFO, max 100K | ⬜ Planned |
+| **Session state** | Short-term | In-memory / Redis | TTL 1h | ✅ `sessions.py` / `redis_store.py` |
 
 ---
 
@@ -148,6 +153,6 @@ Overhead: ~1ms на 1MB state.
 | User text | Session lifetime | PII masked before pipeline | API, pipeline |
 | Audio (intermediate) | Overwritten при retry | N/A | Pipeline only |
 | Audio (final) | Session lifetime | N/A | API (GET /session/{id}/audio) |
-| Agent log | Session lifetime | Нет PII (should be) | API, WebSocket |
+| Agent log | Session lifetime | Нет PII | API, WebSocket |
 | Prometheus metrics | App lifetime | Anonymized | /metrics endpoint |
-| Raw logs | stdout/stderr | **⚠️ director_input_text leaks PII** | Log aggregator |
+| Raw logs | stdout/stderr | ✅ **PII удалён** (`director_input` логирует только text_length) | Log aggregator |

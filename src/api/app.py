@@ -12,14 +12,18 @@ Creates and configures the FastAPI app with:
 from __future__ import annotations
 
 import asyncio
+import queue
 import threading
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, Response
 
+from src.api.rate_limiter import RateLimiter
 from src.api.schemas import ErrorResponse, SessionStatus, SynthesizeRequest, SynthesizeResponse
-from src.api.sessions import SessionState, SessionStore
+from src.api.sessions import SessionState, SessionStore, create_session_store
+from src.agents.pronunciation_cache import PronunciationCache
+from src.agents.segment_cache import SegmentCache
 from src.config import AppConfig, get_config
 from src.log import get_logger, setup_logging
 from src.monitoring import METRICS
@@ -29,14 +33,22 @@ from src.security.voice_whitelist import VoiceNotAllowedError, validate_voice
 
 logger = get_logger(__name__)
 
-# Global session store (PoC — single worker)
-_store = SessionStore()
+# Global session store (initialized in create_app)
+_store: SessionStore = SessionStore()
 
 # WebSocket connections per session
 _ws_connections: dict[str, list[WebSocket]] = {}
 
-# Pipeline concurrency limiter — only 1 pipeline at a time (GPU bound)
-_pipeline_semaphore = threading.Semaphore(1)
+# Pipeline queue — sessions are enqueued and processed by a background worker
+_pipeline_queue: queue.Queue[str] = queue.Queue()
+_pipeline_worker_started = False
+
+# Rate limiter (initialized in create_app)
+_rate_limiter: RateLimiter | None = None
+
+# Cross-session caches (singleton, survive across requests)
+_pronunciation_cache = PronunciationCache()
+_segment_cache = SegmentCache()
 
 
 def create_app(config: AppConfig | None = None) -> FastAPI:
@@ -52,6 +64,16 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         config = get_config()
 
     setup_logging(config)
+
+    # ── Initialize session store ──
+    global _store  # noqa: PLW0603
+    _store = create_session_store(config)
+
+    # ── Initialize tracing (OTel) ──
+    if config.logging.enable_otel:
+        from src.monitoring.tracing import init_tracing
+
+        init_tracing(config.logging)
 
     app = FastAPI(
         title="ReflexTTS",
@@ -87,9 +109,21 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     async def list_voices() -> dict[str, list[str]]:
         return {"voices": config.security.whitelisted_voices}
 
+    # ── Initialize rate limiter ──
+    global _rate_limiter  # noqa: PLW0603
+    _rate_limiter = RateLimiter(max_requests=config.api.rate_limit_per_minute)
+
     # ── Synthesize ──
     @app.post("/synthesize", response_model=SynthesizeResponse, status_code=202)
-    async def synthesize(req: SynthesizeRequest) -> SynthesizeResponse:
+    async def synthesize(req: SynthesizeRequest, request: Request) -> SynthesizeResponse:
+        # 0. Rate limiting
+        client_ip = request.client.host if request.client else "unknown"
+        if _rate_limiter and not _rate_limiter.check(client_ip):
+            raise HTTPException(
+                status_code=429,
+                detail="Rate limit exceeded. Try again later.",
+            )
+
         # 1. Input sanitization
         if config.security.enable_input_sanitization:
             sanitize_result = sanitize_input(req.text, max_length=config.security.max_text_length)
@@ -113,24 +147,22 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         # 4. Create session
         session = _store.create(text=text, voice_id=req.voice_id)
 
-        # 5. Launch pipeline in background thread (separate event loop)
-        if not _pipeline_semaphore.acquire(blocking=False):
-            raise HTTPException(
-                status_code=503,
-                detail="Pipeline busy — another synthesis is in progress. Try again later.",
-            )
+        # 5. Enqueue pipeline for background processing
+        _pipeline_queue.put(session.session_id)
+        _ensure_pipeline_worker(config)
 
-        t = threading.Thread(
-            target=_run_pipeline_thread,
-            args=(session.session_id, config),
-            daemon=True,
-        )
-        t.start()
+        queue_size = _pipeline_queue.qsize()
+        session.queue_position = queue_size
+        _store.update(session)
 
         return SynthesizeResponse(
             session_id=session.session_id,
-            status="processing",
-            message="Synthesis pipeline started",
+            status="queued" if queue_size > 0 else "processing",
+            message=(
+                f"Position {queue_size} in queue"
+                if queue_size > 0
+                else "Synthesis pipeline started"
+            ),
         )
 
     # ── Session Status ──
@@ -150,6 +182,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
             needs_human_review=session.needs_human_review,
             agent_log=session.agent_log,
             error_message=session.error_message,
+            queue_position=session.queue_position,
         )
 
     # ── Audio Download ──
@@ -233,33 +266,52 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     return app
 
 
-def _run_pipeline_thread(session_id: str, config: AppConfig) -> None:
-    """Thread target: runs pipeline in its own asyncio event loop.
+def _ensure_pipeline_worker(config: AppConfig) -> None:
+    """Start the background pipeline worker thread if not already running."""
+    global _pipeline_worker_started  # noqa: PLW0603
+    if _pipeline_worker_started:
+        return
+    _pipeline_worker_started = True
+    t = threading.Thread(
+        target=_pipeline_worker,
+        args=(config,),
+        daemon=True,
+    )
+    t.start()
+    logger.info("pipeline_worker_started")
 
-    Completely decoupled from the main uvicorn event loop.
-    Has a 300s hard timeout to prevent infinite hangs.
+
+def _pipeline_worker(config: AppConfig) -> None:
+    """Background worker: processes pipeline sessions from the queue.
+
+    Runs indefinitely, pulling session IDs from the queue and executing
+    the pipeline for each. Only one pipeline runs at a time (GPU bound).
     """
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        loop.run_until_complete(
-            asyncio.wait_for(_pipeline_impl(session_id, config), timeout=300.0)
-        )
-    except TimeoutError:
-        logger.error("pipeline_timeout", session_id=session_id)
-        session = _store.get(session_id)
-        if session:
-            session.status = SessionState.FAILED
-            session.error_message = "Pipeline timed out (300s)"
-            session.agent_log.append(
-                {"agent": "orchestrator", "action": "failed", "detail": "Pipeline timed out (300s)"}
+    while True:
+        session_id = _pipeline_queue.get()  # blocks until item available
+        logger.info("pipeline_dequeued", session_id=session_id, queue_remaining=_pipeline_queue.qsize())
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(
+                asyncio.wait_for(_pipeline_impl(session_id, config), timeout=300.0)
             )
-            _store.update(session)
-    except Exception as e:
-        logger.error("pipeline_thread_error", session_id=session_id, error=str(e))
-    finally:
-        loop.close()
-        _pipeline_semaphore.release()
+        except TimeoutError:
+            logger.error("pipeline_timeout", session_id=session_id)
+            session = _store.get(session_id)
+            if session:
+                session.status = SessionState.FAILED
+                session.error_message = "Pipeline timed out (300s)"
+                session.agent_log.append(
+                    {"agent": "orchestrator", "action": "failed", "detail": "Pipeline timed out (300s)"}
+                )
+                _store.update(session)
+        except Exception as e:
+            logger.error("pipeline_worker_error", session_id=session_id, error=str(e))
+        finally:
+            loop.close()
+            _pipeline_queue.task_done()
 
 
 async def _pipeline_impl(session_id: str, config: AppConfig) -> None:
@@ -301,6 +353,8 @@ async def _pipeline_impl(session_id: str, config: AppConfig) -> None:
             tts=tts,
             asr=asr,
             max_retries=config.security.max_retries,
+            pronunciation_cache=_pronunciation_cache,
+            segment_cache=_segment_cache,
         )
         compiled = graph.compile()
 

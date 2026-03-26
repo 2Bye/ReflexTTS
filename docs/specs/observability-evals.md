@@ -76,9 +76,15 @@ reflex_active_sessions 0
 | `route_max_retries` | WARNING | Orchestrator | Max retries reached |
 | `pipeline_escalated` | WARNING | Orchestrator | Human review needed |
 | `pipeline_start` | INFO | API | Pipeline started |
+| `pipeline_dequeued` | INFO | API | Session dequeued from pipeline |
 | `pipeline_completed` | INFO | API | Pipeline done |
 | `pipeline_failed` | ERROR | API | Pipeline error |
 | `pipeline_timeout` | ERROR | API | 300s timeout |
+| `rate_limit_exceeded` | WARNING | API | IP rate limit exceeded |
+| `pronunciation_cache_hit` | DEBUG | Director | Cached hint applied |
+| `pronunciation_cache_record` | INFO | Critic | Hint result recorded |
+| `segment_cache_hit` | DEBUG | Actor | Cached audio used |
+| `segment_cache_store` | INFO | Actor | Audio cached |
 | `injection_detected` | WARNING | Security | Prompt injection found |
 | `input_too_long` | WARNING | Security | Text exceeds limit |
 | `app_created` | INFO | API | Server initialized |
@@ -119,8 +125,8 @@ reflex_active_sessions 0
 |--------|-----------|
 | **trace_id** | `GraphState.trace_id` = session UUID | 
 | **Propagation** | Передаётся через GraphState |
-| **OpenTelemetry** | Конфигурация есть (`LOG_ENABLE_OTEL`), интеграция **не реализована** |
-| **Distributed tracing** | Нет |
+| **OpenTelemetry** | ✅ Реализовано (`src/monitoring/tracing.py`). `LOG_ENABLE_OTEL=true` → TracerProvider + OTLP/Console exporter |
+| **Distributed tracing** | ✅ OTel spans для agent nodes (via `get_tracer()`) |
 
 ### Планируемое (production)
 
@@ -137,6 +143,8 @@ FastAPI → OpenTelemetry → Jaeger/Tempo
   ├── Span: CosyVoice synth   (text_len, duration_s)
   └── Span: WhisperX transcribe (audio_duration, confidence)
 ```
+
+> ✅ **Реализовано**: `src/monitoring/tracing.py` — `init_tracing(config)` + `get_tracer(name)`. NoOp при `LOG_ENABLE_OTEL=false`.
 
 ---
 
@@ -176,7 +184,11 @@ FastAPI → OpenTelemetry → Jaeger/Tempo
 | API | `test_api.py` | 17 |
 | Benchmarks | `test_benchmarks.py` | 12 |
 | Monitoring | `test_monitoring.py` | 10 |
-| **Total** | — | **171** |
+| Rate Limiter | `test_rate_limiter.py` | 5 |
+| Pronunciation Cache | `test_pronunciation_cache.py` | 8 |
+| Segment Cache | `test_segment_cache.py` | 7 |
+| Tracing | `test_tracing.py` | 2 |
+| **Total** | — | **193** |
 
 ### CI/CD Pipeline
 
@@ -191,16 +203,17 @@ FastAPI → OpenTelemetry → Jaeger/Tempo
 
 ---
 
-## 5. Alerting (planned)
+## 5. Alerting
+
+> ✅ **Реализовано**: `docker/prometheus/alerts.yml` + `docker/prometheus/prometheus.yml`
 
 | Alert | Condition | Severity |
 |-------|-----------|----------|
-| Pipeline success rate < 90% | `reflex_pipeline_status{status="failed"}` / total > 10% | Critical |
-| Pipeline latency p95 > 120s | `reflex_request_latency_seconds` p95 > 120 | Warning |
-| Active sessions stuck | `reflex_active_sessions` > 0 for > 10min | Critical |
+| Pipeline success rate < 90% | `rate(reflex_pipeline_status{status="failed"}[5m]) / rate(total) > 0.1` | Critical |
+| Pipeline latency p95 > 120s | `histogram_quantile(0.95, reflex_request_latency_seconds_bucket) > 120` | Warning |
+| Active sessions stuck | `reflex_active_sessions > 0` for > 10min | Critical |
 | WER regression | `reflex_pipeline_wer` p50 > 0.05 | Warning |
-| vLLM health fails | Docker healthcheck | Critical |
-| GPU OOM | Container restart + memory metrics | Critical |
+| High iteration count | `reflex_pipeline_iterations` p50 > 2.5 | Warning |
 
 ---
 

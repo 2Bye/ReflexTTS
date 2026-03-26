@@ -42,7 +42,7 @@ Edges:
 | **Input** | `state.text`, `state.voice_id`, `state.errors` (если iteration > 0) |
 | **Action** | `vllm.chat_json(DIRECTOR_PROMPT, text)` → `DirectorOutput` |
 | **Output** | `state.ssml_markup`, `state.tts_instruct` |
-| **Side action** | `_apply_hotfix_hints()` если iteration > 0 |
+| **Side action** | `_apply_hotfix_hints()` если iteration > 0; `_apply_cached_hints()` из `PronunciationCache` |
 | **Duration** | 2-15s |
 
 ### Step 2: Actor
@@ -50,9 +50,9 @@ Edges:
 | Параметр | Значение |
 |----------|---------|
 | **Input** | `state.ssml_markup.segments[]`, `state.segment_approved[]` |
-| **Action** | ∀ unapproved segment: `tts.synthesize()` via `asyncio.gather(Semaphore(4))` |
+| **Action** | ∀ unapproved segment: check `SegmentCache` → `tts.synthesize()` via `asyncio.gather(Semaphore(4))` |
 | **Output** | `state.audio_bytes`, `state.segment_audio[]`, `state.sample_rate` |
-| **Optimization** | Skip approved segments (reuse from cache) |
+| **Optimization** | Skip approved segments; skip cached segments (`SegmentCache` hit) |
 | **Duration** | 3-15s (depends on segment count) |
 
 ### Step 3: Critic
@@ -63,7 +63,7 @@ Edges:
 | **Action 1** | ∀ unapproved segment: `asr.transcribe(segment_wav)` |
 | **Action 2** | ∀ unapproved segment: `vllm.chat_json(JUDGE_PROMPT, {target, transcript})` |
 | **Output** | `state.errors[]`, `state.wer`, `state.is_approved`, `state.segment_approved[]` |
-| **Post-action** | `state.iteration += 1` |
+| **Post-action** | `state.iteration += 1`; запись результатов в `PronunciationCache` |
 | **Duration** | 3-15s per unapproved segment |
 
 ### Step 4: Editor (conditional)
